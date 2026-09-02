@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "hew-status", "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "hew.status", "--port", "8770"], "port": 8770 }
+  ]
+}

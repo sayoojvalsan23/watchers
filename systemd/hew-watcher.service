@@ -1,0 +1,19 @@
+[Unit]
+Description=Himalayan Early Warning - catalogue watcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hew
+WorkingDirectory=/opt/hew
+ExecStart=/usr/bin/python3 -m hew.watcher --db /var/lib/hew/hew.db
+Restart=always
+RestartSec=10
+# Phase 1: dispatch is OFF. Add --allow-dispatch only after the
+# false-positive rate has been measured and a partner has agreed.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

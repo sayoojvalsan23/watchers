@@ -1,0 +1,197 @@
+{
+ "gate_alerts_per_year": 2.0,
+ "event": {
+  "name": "Chooralmala / Mundakkai",
+  "date": "2024-07-30",
+  "station": "Vythiri",
+  "mm_24h": 280.0,
+  "note": "~250 dead. Landslides 01:00 and 04:10 IST."
+ },
+ "station_years": {
+  "all": 96.8,
+  "ghat_foothill": 35.7,
+  "ghat": 13.4
+ },
+ "curves": {
+  "all": [
+   {
+    "threshold_mm": 100,
+    "alerts_per_year": 49.68,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 125,
+    "alerts_per_year": 30.89,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 150,
+    "alerts_per_year": 18.8,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 175,
+    "alerts_per_year": 10.74,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 200,
+    "alerts_per_year": 4.7,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 225,
+    "alerts_per_year": 1.34,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 250,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 275,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 300,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": false
+   }
+  ],
+  "ghat_foothill": [
+   {
+    "threshold_mm": 100,
+    "alerts_per_year": 24.84,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 125,
+    "alerts_per_year": 16.11,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 150,
+    "alerts_per_year": 10.07,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 175,
+    "alerts_per_year": 3.36,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 200,
+    "alerts_per_year": 1.34,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 225,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 250,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 275,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 300,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": false
+   }
+  ],
+  "ghat": [
+   {
+    "threshold_mm": 100,
+    "alerts_per_year": 17.46,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 125,
+    "alerts_per_year": 10.07,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 150,
+    "alerts_per_year": 4.7,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 175,
+    "alerts_per_year": 2.69,
+    "passes_gate": false,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 200,
+    "alerts_per_year": 1.34,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 225,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 250,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 275,
+    "alerts_per_year": 0.67,
+    "passes_gate": true,
+    "catches_event": true
+   },
+   {
+    "threshold_mm": 300,
+    "alerts_per_year": 0.0,
+    "passes_gate": true,
+    "catches_event": false
+   }
+  ]
+ },
+ "recommended": {
+  "monitor": "ghat_foothill",
+  "threshold_mm": 200.0,
+  "alerts_per_year": 1.34,
+  "why": "lowest threshold that passes the gate on landslide terrain"
+ },
+ "caveats": [
+  "Recall rests on ONE event. False-alarm rate is measured over 36 station-years; recall is not.",
+  "1.49 years of record. KSDMA's media library begins May 2024.",
+  "24 h totals only. The bulletin publishes ~12:00 IST for a window ending 08:00, so it CANNOT trigger -- this calibrates a feed we do not yet have (IMD AWS, 401 whitelist).",
+  "Coordinates are town centroids, adequate for terrain class only."
+ ]
+}

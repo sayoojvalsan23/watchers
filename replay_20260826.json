@@ -1,0 +1,149 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": "nep2026a",
+   "properties": {
+    "mag": 2.6,
+    "time": 1787711700000,
+    "type": "earthquake",
+    "place": "test"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     85.515,
+     28.271,
+     3.1
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "nep2026b",
+   "properties": {
+    "mag": 5.2,
+    "time": 1787712730000,
+    "type": "landslide",
+    "place": "test"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     85.515,
+     28.271,
+     2.0
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "nep2026c",
+   "properties": {
+    "mag": 4.2,
+    "time": 1787723520000,
+    "type": "earthquake",
+    "place": "test"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     85.52,
+     28.28,
+     2.5
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "bg1",
+   "properties": {
+    "mag": 4.4,
+    "time": 1787706600000,
+    "type": "earthquake",
+    "place": "test"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     86.1,
+     28.4,
+     10.0
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "bg2",
+   "properties": {
+    "mag": 4.9,
+    "time": 1787708400000,
+    "type": "earthquake",
+    "place": "test"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     85.6,
+     27.9,
+     42.0
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "bg3",
+   "properties": {
+    "mag": 4.1,
+    "time": 1787714100000,
+    "type": "earthquake",
+    "place": "test"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     88.2,
+     27.3,
+     4.0
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "bg4",
+   "properties": {
+    "mag": 5.1,
+    "time": 1787716800000,
+    "type": "earthquake",
+    "place": "test"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     86.48,
+     27.87,
+     33.0
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "bg5",
+   "properties": {
+    "mag": 4.5,
+    "time": 1787718600000,
+    "type": "earthquake",
+    "place": "test"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     84.48,
+     28.49,
+     3.0
+    ]
+   }
+  }
+ ]
+}

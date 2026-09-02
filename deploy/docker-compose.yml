@@ -1,0 +1,12 @@
+services:
+  watcher:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - hewdata:/var/lib/hew
+    environment:
+      - TZ=Asia/Kathmandu
+volumes:
+  hewdata:

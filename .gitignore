@@ -1,0 +1,28 @@
+# Runtime state -- never source of truth, always rebuildable by the watcher.
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+.pytest_cache/
+
+# Fetch and calibration caches. Regenerable; .catalogue_cache in particular
+# must NOT be shared, because a cache keyed on stale query parameters is how
+# the Phase 0 gate came to report a fresh GO for a box it never fetched (D13).
+.catalogue_cache/
+.calibration_cache/
+data/rain_cache/
+data/rain_clim/
+
+# Large regenerable geodata. Every one of these is rebuilt by a committed
+# script, with provenance recorded in data/manifest.json, which IS tracked:
+#   scripts/fetch_geodata.py            rivers_/places_ per basin
+#   scripts/fetch_himalaya_geodata.py   rivers_/places_himalaya (tiled)
+# rivers_kerala.json alone is 96 MB, within a rounding error of GitHub's
+# 100 MB hard limit, and the Himalayan river layer is larger again.
+data/himalaya_tiles/
+data/rivers_kerala.json
+data/rivers_region.json
+data/rivers_himalaya.json
+data/places_himalaya.json
+data/backtest/
+data/backtest_seed/

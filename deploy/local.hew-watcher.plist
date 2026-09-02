@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd agent for the Phase 1 watcher.
+
+  This runs a PERSISTENT PROCESS, not a scheduled job. watcher.run() has its
+  own 60s poll / 5m heartbeat / 1h canary loop and handles SIGTERM, so a cron
+  or a serverless scheduler is both worse and more complicated: the cheapest
+  schedulers cannot go below 5 minutes, and per-invocation ones pay a cold
+  start 1,440 times a day to do a 200 ms job.
+
+  Dispatch is OFF. Phase 1 measures; it does not warn. Do not add
+  --allow-dispatch here.
+
+  Install:
+     cp deploy/local.hew-watcher.plist ~/Library/LaunchAgents/
+     launchctl load  ~/Library/LaunchAgents/local.hew-watcher.plist
+  Stop:
+     launchctl unload ~/Library/LaunchAgents/local.hew-watcher.plist
+  Watch it:
+     tail -f ~/Library/Logs/hew-watcher.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.hew-watcher</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-m</string>
+    <string>hew.watcher</string>
+    <string>--db</string>
+    <string>/Users/sayoojvalsan/Downloads/files (1)/hew.db</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/sayoojvalsan/Downloads/files (1)</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>/Users/sayoojvalsan/Downloads/files (1)</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+
+  <!-- start at login and restart if it ever exits -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/sayoojvalsan/Library/Logs/hew-watcher.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/sayoojvalsan/Library/Logs/hew-watcher.log</string>
+
+  <!-- lowest scheduling priority: this must never compete with your work -->
+  <key>Nice</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

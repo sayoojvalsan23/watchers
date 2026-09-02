@@ -1,0 +1,116 @@
+{
+  "rivers_trishuli": {
+    "fetched_at": "2026-08-31T03:50:49.128963+00:00",
+    "bbox": [
+      27.55,
+      84.85,
+      28.45,
+      85.95
+    ],
+    "elements": 388,
+    "source": "OpenStreetMap via Overpass (ODbL)",
+    "osm_base": "2026-08-31T03:49:24Z"
+  },
+  "places_trishuli": {
+    "fetched_at": "2026-08-31T03:50:53.511508+00:00",
+    "bbox": [
+      27.55,
+      84.85,
+      28.45,
+      85.95
+    ],
+    "elements": 1080,
+    "source": "OpenStreetMap via Overpass (ODbL)",
+    "osm_base": "2026-08-31T03:49:24Z"
+  },
+  "glacial_lakes_hma": {
+    "source": "NASA NSIDC \u2014 High Mountain Asia Near-Global Multi-Decadal Glacial Lake Inventory V001",
+    "collection": "C3249539102-NSIDC_CPRD",
+    "doi": "granule HMA_GLI_glacial_lakes_LatLonWGS84_2015_18",
+    "epoch": "2015-2018",
+    "features": 14394,
+    "in_study_box": 331,
+    "geometry": "polygon bounding-box centroids (vertices not retained)",
+    "note": "Replaces the 8-site placeholder registry for calibration."
+  },
+  "hazard_sites_nepal": {
+    "sources": [
+      "NSIDC HMA Near-Global Glacial Lake Inventory v1 (2015-2018)",
+      "Randolph Glacier Inventory 7.0, glacier centroids (open mirror, cluster.klima.uni-bremen.de/~oggm)"
+    ],
+    "glaciers": 5575,
+    "lakes": 331,
+    "total": 5906,
+    "why": "The 2026 event was a rock-ice avalanche off a hanging glacier, not a lake outburst. A lake-only inventory is the wrong prior for that event class.",
+    "built": "2026-08-31"
+  },
+  "places_region": {
+    "source": "OpenStreetMap via Overpass (ODbL)",
+    "elements": 5580,
+    "bbox": [
+      27.0,
+      84.0,
+      30.0,
+      89.0
+    ],
+    "fetched": "2026-08-31",
+    "why": "Exposure ranking was computed against the Trishuli-basin-only place list, so every large earthquake pointed at the same valley."
+  },
+  "rivers_kerala": {
+    "fetched_at": "2026-09-01T14:12:19.391667+00:00",
+    "bbox": [
+      8.15,
+      74.85,
+      12.85,
+      77.45
+    ],
+    "elements": 96553,
+    "source": "OpenStreetMap via Overpass (ODbL)",
+    "osm_base": "2026-09-01T14:10:21Z"
+  },
+  "places_kerala": {
+    "fetched_at": "2026-09-01T14:12:34.891896+00:00",
+    "bbox": [
+      8.15,
+      74.85,
+      12.85,
+      77.45
+    ],
+    "elements": 9917,
+    "source": "OpenStreetMap via Overpass (ODbL)",
+    "osm_base": "2026-09-01T14:10:21Z"
+  },
+  "hazard_sites_himalaya": {
+    "sources": [
+      "Randolph Glacier Inventory 7.0, glacier centroids (open mirror, cluster.klima.uni-bremen.de/~oggm)",
+      "NSIDC HMA Near-Global Glacial Lake Inventory v1 (2015-2018)"
+    ],
+    "bbox": [
+      26.0,
+      71.0,
+      37.5,
+      96.0
+    ],
+    "glaciers": 80679,
+    "lakes": 1473,
+    "total": 82152,
+    "built": "2026-09-02T13:34:14.910581+00:00",
+    "why": "The Nepal-box registry could not see Kedarnath (510 km outside) or Chamoli (449 km outside). Built by script so the extent is auditable and reproducible.",
+    "built_by": "scripts/build_hazard_registry.py"
+  },
+  "places_himalaya": {
+    "fetched_at": "2026-09-02T14:13:58.230188+00:00",
+    "bbox": [
+      26.0,
+      71.0,
+      37.5,
+      96.0
+    ],
+    "elements": 160729,
+    "tiles": 50,
+    "tiles_missing": 0,
+    "source": "OpenStreetMap via Overpass (ODbL)",
+    "osm_base": "2026-09-02T13:36:54Z",
+    "note": ""
+  }
+}
