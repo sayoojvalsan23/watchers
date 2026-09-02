@@ -112,20 +112,20 @@ of warning capability.
 
 ## Measured, not yet enforced
 
-| Metric | Today (2026-08-31) | Direction |
+| Metric | Today (2026-09-02) | Direction |
 |--------|--------------------|-----------|
-| **Phase 0, REAL registry** | **0.34 /yr — GO** | the number that counts |
-| Registry | **331 mapped glacial lakes** (14,394 HKH-wide) | was 8 placeholder sites |
+| **Phase 0, REAL registry** | **1.20 /yr — GO** | the number that counts |
+| Registry | **82,152 sites** (80,679 RGI glaciers + 1,473 HMA lakes) | was 331 lakes in a Nepal box (D15) |
 | Calibrated hazard radius | 11.0 km, 95% CI [8.2, 20.9] | n=22; 15.0 sits inside the CI |
 | 26 Aug 2026, real registry | WARNING, score 84, nearest lake 10.0 km | was 0.0 km by construction |
 |--------|--------------------|-----------|
-| Phase 0 ceiling false-alarm rate | 1.89 /yr | must not rise above 2.00 |
+| Phase 0 ceiling false-alarm rate | **3.77 /yr — EXCEEDS THE 2.00 GATE** | widening the box 20x did this; TUNE, not GO (D15) |
 | Phase 0 floor (8-site registry) | 0.17 /yr | both alerts are true positives; not a false-alarm signal |
 | Curated recall — USGS-reachable | **1 of 1** | holds at 1 of 1 |
 | Curated recall — needs regional feed | **0 of 1** | blocked on feed, not on tuning |
 | USGS magnitude completeness, bbox | **M4.0** | feed limitation, not tunable |
-| Registry coverage vs ICIMOD inventory | unmeasured (8 placeholder sites) | must be measured before Phase 1 |
-| Catalogue events at default depth | 80.6% (462/573) | now capped at watch, not discarded |
+| Registry coverage vs ICIMOD inventory | Himalaya-wide; Kedarnath 3.3 km, Chamoli 1.6 km, Nanga Parbat 0.8 km | was 510 / 449 / 1,059 km OUTSIDE the box |
+| Catalogue events at default depth | 40.6% (1,618/3,982) | now capped at watch, not discarded |
 | Default-depth events within 15 km of a listed site | 4 of 462 | rises sharply with a real registry |
 | Catalogue latency to characterised record | **13 h 06 m** (26 Aug 2026) | not tunable; feed property |
 | Pipeline latency, record → corridor | 0.1 ms detect + 1.4 s route (2 branches) | not the bottleneck |
