@@ -90,13 +90,46 @@ StandardError=journal
 WantedBy=multi-user.target
 STATUSEOF
 
+# The rainfall watch. This was missing: the script installed the seismic
+# watcher and the dashboard, while systemd/hew-rain-watcher.service sat in
+# the repo unreferenced -- so "run install-pi.sh" gave you a Pi with the
+# /rain tab permanently reading NOT RUNNING and no obvious reason why.
+#
+# 3-hourly, not 60 s. Rainfall accumulates over 12-72 h so this loses
+# nothing, and Open-Meteo prices by LOCATION: 316 nodes x 8 cycles =
+# 2,528/day against a ~10,000/day cap. Raising the cadence without redoing
+# that arithmetic will silently kill the service every afternoon.
+RAIN_UNIT=/etc/systemd/system/hew-rain-watcher.service
+sudo tee "${RAIN_UNIT}" >/dev/null <<RAINEOF
+[Unit]
+Description=Himalayan Early Warning - rainfall watch (Phase 5b, Kerala)
+After=network-online.target
+
+[Service]
+Type=simple
+User=${APP_USER}
+WorkingDirectory=${APP_DIR}
+Environment=PYTHONPATH=${APP_DIR}
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m hew.rain_watcher --db ${DB_DIR}/hew-rain.db --interval 10800
+Restart=always
+RestartSec=60
+Nice=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+RAINEOF
+
 sudo systemctl daemon-reload
-sudo systemctl enable --now hew-watcher hew-status
+sudo systemctl enable --now hew-watcher hew-status hew-rain-watcher
 sleep 3
 sudo systemctl --no-pager --lines=12 status hew-watcher || true
 echo
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "status page:  http://${IP:-<pi-ip>}:8080/"
+echo "rainfall tab: http://${IP:-<pi-ip>}:8080/rain"
 
 cat <<'DONE'
 

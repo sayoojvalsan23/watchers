@@ -1,12 +1,21 @@
 # Running the Phase 1 watcher
 
-Measured footprint (2026-08-31, live against USGS):
+Measured footprint (2026-09-02, on a Pi 5, live against USGS):
 
-    startup (331 lakes + 388 river ways + 854 places)   0.0 s
-    one poll cycle                                      1.03 s
-    peak memory                                         51 MB
-    duty cycle at 60 s polling                          1.7% of one core
-    USGS requests per day                               1,440
+    startup (82,152 sites + 20,183 river ways + 115,075 places)   0.9 s
+    one poll cycle                                                1.03 s
+    resident memory                                               231 MB
+    duty cycle at 60 s polling                                    1.7% of one core
+    USGS requests per day                                         1,440
+
+The earlier figure here was **51 MB**, measured against 331 lakes, 388 river
+ways and 854 places -- a single basin. Widening to the Himalayan arc took the
+same process to **1,493 MB**, which is 37% of a 4 GB Pi and would not start at
+all on a Pi Zero. It is back to 231 MB because the river layer is now loaded
+from a packed binary instead of parsed from JSON; see the routing commit.
+
+Anyone sizing hardware from the old number would have bought the wrong board,
+which is why it is recorded here rather than quietly overwritten.
 
 ## Run a persistent process, not a scheduler
 
@@ -22,7 +31,7 @@ a cold start 1,440 times a day to do a one-second job.
 | Option | Cost | Verdict |
 |--------|------|---------|
 | Your laptop (`local.hew-watcher.plist`) | free | Start here. Only flaw is sleep gaps, which look identical to failures in the heartbeat log. |
-| A machine you own, left on — old laptop, Raspberry Pi | ~$50 once | Best for the 60-day run. No third-party terms that can change under you. 51 MB fits a Pi Zero. |
+| A machine you own, left on — old laptop, Raspberry Pi | ~$50 once | Best for the 60-day run. No third-party terms that can change under you. 231 MB with the full Himalayan layer, so a 1 GB Pi 3 is comfortable; a 512 MB Pi Zero is not. |
 | Cheap VPS | ~$4/month | Fine. Buys away a class of failure. |
 | **Oracle Cloud Always Free** | free | **No — see below.** |
 
