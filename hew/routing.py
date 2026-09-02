@@ -29,6 +29,7 @@ LIMITS -- read before trusting output:
 
 import json
 import math
+from array import array
 import os
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
@@ -42,15 +43,54 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
+class _Way:
+    """
+    One channel, stored compactly.
+
+    The raw Overpass dicts cost ~360 bytes per coordinate: a {"lat":..,
+    "lon":..} dict per vertex plus a full node-id list plus the tag dict.
+    Across the Himalayan layer that is 2.66 M coordinates and 958 MB, which
+    is 37% of a 4 GB Pi for one process. Parallel float arrays carry the
+    same numbers in 16 bytes a vertex.
+
+    Only `name`, the vertex coordinates, the vertex COUNT and the FINAL node
+    id are ever read after construction, so nothing else is retained.
+    """
+
+    __slots__ = ("lat", "lon", "n_nodes", "last_node", "name")
+
+    def __init__(self, w):
+        g = w["geometry"]
+        self.lat = array("d", [p["lat"] for p in g])
+        self.lon = array("d", [p["lon"] for p in g])
+        nodes = w["nodes"]
+        self.n_nodes = len(nodes)
+        self.last_node = nodes[-1]
+        t = w.get("tags") or {}
+        self.name = t.get("name:en") or t.get("name") or "unnamed channel"
+
+
 class RiverNetwork:
     """OSM waterway ways indexed by node id for exact junction traversal."""
 
     def __init__(self, ways):
-        self.ways = [w for w in ways if w.get("geometry") and w.get("nodes")]
+        raw = [w for w in ways if w.get("geometry") and w.get("nodes")]
+
+        # The index is only ever QUERIED with a way's final node id
+        # (_next_way is called as _next_way(w.last_node, wi)), so indexing
+        # every one of 2.66 M vertices allocated a dict entry, a list and a
+        # tuple for millions of nodes that can never be looked up. Index only
+        # ids that terminate some way: 20 k keys instead of 2.66 M, and the
+        # junction lookups are bit-for-bit the same.
+        terminal = {w["nodes"][-1] for w in raw}
+
+        self.ways = []
         self.node_index = {}
-        for wi, w in enumerate(self.ways):
+        for wi, w in enumerate(raw):
             for pos, nid in enumerate(w["nodes"]):
-                self.node_index.setdefault(nid, []).append((wi, pos))
+                if nid in terminal:
+                    self.node_index.setdefault(nid, []).append((wi, pos))
+            self.ways.append(_Way(w))
 
     @classmethod
     def load(cls, path=None):
@@ -63,26 +103,68 @@ class RiverNetwork:
         The same argument applied again: the region file covers 27-30 N,
         84-89 E, so Uttarakhand, Himachal, Ladakh, Bhutan and Arunachal had
         no corridor either. Widest available wins.
+
+        Prefers the .bin form of whichever layer wins. Parsing the JSON
+        materialises 2.66 M coordinate dicts before one is converted, and
+        the allocator keeps that high-water mark: 921 MB retained for ~200 MB
+        of live data. The .bin carries the same numbers as packed float64,
+        so no per-vertex Python object is ever created.
         """
         if path is None:
-            for candidate in ("rivers_himalaya.json", "rivers_region.json",
+            for candidate in ("rivers_himalaya.bin", "rivers_himalaya.json",
+                              "rivers_region.bin", "rivers_region.json",
                               "rivers_trishuli.json"):
                 path = os.path.join(DATA_DIR, candidate)
                 if os.path.exists(path):
                     break
+        if path.endswith(".bin"):
+            return cls.from_compact(path)
         with open(path) as f:
             return cls(json.load(f)["elements"])
 
+    @classmethod
+    def from_compact(cls, path):
+        """Load the packed form written by scripts/compact_rivers.py."""
+        self = cls.__new__(cls)
+        with open(path, "rb") as f:
+            header = json.loads(f.readline().decode())["ways"]
+            total = sum(h["n_coords"] for h in header)
+            lats, lons = array("d"), array("d")
+            lats.fromfile(f, total)
+            lons.fromfile(f, total)
+
+        self.ways = []
+        self.node_index = {}
+        off = 0
+        for wi, h in enumerate(header):
+            n = h["n_coords"]
+            w = _Way.__new__(_Way)
+            w.lat = lats[off:off + n]
+            w.lon = lons[off:off + n]
+            w.n_nodes = h["n_nodes"]
+            w.last_node = h["last_node"]
+            w.name = h["name"]
+            self.ways.append(w)
+            off += n
+            # _next_way looks up a way's final node id and wants every OTHER
+            # way where that id sits before its own last vertex. The compact
+            # header carries exactly those pairs, so the index it rebuilds is
+            # identical to the one the JSON path builds, minus the millions
+            # of entries that could never be queried.
+            for nid, pos in h["junctions"]:
+                self.node_index.setdefault(nid, []).append((wi, pos))
+        return self
+
     def name(self, wi):
-        t = self.ways[wi].get("tags", {})
-        return t.get("name:en") or t.get("name") or "unnamed channel"
+        return self.ways[wi].name
 
     def snap(self, lat, lon):
         """Nearest network vertex. Returns (way_index, position, distance_km)."""
         best = (None, None, float("inf"))
         for wi, w in enumerate(self.ways):
-            for pos, g in enumerate(w["geometry"]):
-                d = haversine_km(lat, lon, g["lat"], g["lon"])
+            wlat, wlon = w.lat, w.lon
+            for pos in range(len(wlat)):
+                d = haversine_km(lat, lon, wlat[pos], wlon[pos])
                 if d < best[2]:
                     best = (wi, pos, d)
         return best
@@ -97,13 +179,13 @@ class RiverNetwork:
         keeps the trace on the trunk instead of walking up a side stream.
         """
         cands = [(wi, pos) for wi, pos in self.node_index.get(node_id, [])
-                 if wi != from_way and pos < len(self.ways[wi]["nodes"]) - 1]
+                 if wi != from_way and pos < self.ways[wi].n_nodes - 1]
         if not cands:
             return None
         same = [c for c in cands if self.name(c[0]) == self.name(from_way)]
         pool = same or cands
         # Prefer the larger channel: more remaining vertices below the junction.
-        return max(pool, key=lambda c: len(self.ways[c[0]]["nodes"]) - c[1])
+        return max(pool, key=lambda c: self.ways[c[0]].n_nodes - c[1])
 
     def trace(self, lat, lon, max_km=200.0, max_snap_km=10.0):
         """
@@ -129,15 +211,15 @@ class RiverNetwork:
                 break
             seen.add(wi)
             w = self.ways[wi]
-            geom, nodes = w["geometry"], w["nodes"]
-            for i in range(pos, len(geom)):
-                g = geom[i]
+            wlat, wlon, nm = w.lat, w.lon, w.name
+            for i in range(pos, len(wlat)):
+                la, lo = wlat[i], wlon[i]
                 if prev is not None:
-                    total += haversine_km(prev[0], prev[1], g["lat"], g["lon"])
-                prev = (g["lat"], g["lon"])
-                path.append({"lat": g["lat"], "lon": g["lon"],
-                             "river_km": round(total, 2), "channel": self.name(wi)})
-            nxt = self._next_way(nodes[-1], wi)
+                    total += haversine_km(prev[0], prev[1], la, lo)
+                prev = (la, lo)
+                path.append({"lat": la, "lon": lo,
+                             "river_km": round(total, 2), "channel": nm})
+            nxt = self._next_way(w.last_node, wi)
             if nxt is None:
                 break
             wi, pos = nxt
@@ -155,9 +237,10 @@ def snap_candidates(net, lat, lon, radius_km):
     """
     best = {}
     for wi, w in enumerate(net.ways):
-        nm = net.name(wi)
-        for pos, g in enumerate(w["geometry"]):
-            d = haversine_km(lat, lon, g["lat"], g["lon"])
+        nm = w.name
+        wlat, wlon = w.lat, w.lon
+        for pos in range(len(wlat)):
+            d = haversine_km(lat, lon, wlat[pos], wlon[pos])
             if d <= radius_km and (nm not in best or d < best[nm][2]):
                 best[nm] = (wi, pos, d)
     return sorted(best.values(), key=lambda c: c[2])
@@ -198,8 +281,8 @@ def trace_branches(net, lat, lon, uncertainty_km=0.0, max_branches=6,
 
     out = []
     for wi, pos, d in snap_candidates(net, lat, lon, uncertainty_km)[:max_branches]:
-        path, _ = net.trace(net.ways[wi]["geometry"][pos]["lat"],
-                            net.ways[wi]["geometry"][pos]["lon"], **kw)
+        path, _ = net.trace(net.ways[wi].lat[pos],
+                            net.ways[wi].lon[pos], **kw)
         if path and path[-1]["river_km"] >= min_branch_km:
             # Re-base river_km on the SOURCE, not on this branch's own snap
             # point. Branches snap at different distances -- here 5.9 km and

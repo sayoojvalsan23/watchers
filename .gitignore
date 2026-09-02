@@ -26,3 +26,5 @@ data/rivers_himalaya.json
 data/places_himalaya.json
 data/backtest/
 data/backtest_seed/
+data/rivers_himalaya.bin
+data/rivers_region.bin
