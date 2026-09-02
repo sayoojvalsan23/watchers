@@ -112,5 +112,20 @@
     "source": "OpenStreetMap via Overpass (ODbL)",
     "osm_base": "2026-09-02T13:36:54Z",
     "note": ""
+  },
+  "rivers_himalaya": {
+    "fetched_at": "2026-09-02T14:49:30.891578+00:00",
+    "bbox": [
+      26.0,
+      71.0,
+      37.5,
+      96.0
+    ],
+    "elements": 20183,
+    "tiles": 50,
+    "tiles_missing": 0,
+    "source": "OpenStreetMap via Overpass (ODbL)",
+    "osm_base": "2026-09-02T14:12:28Z",
+    "note": "waterway=river only; stream-tagged headwater channels are absent"
   }
 }
