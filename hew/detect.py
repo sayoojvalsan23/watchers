@@ -45,7 +45,7 @@ FIXED_DEPTHS = {5.0, 10.0, 33.0, 35.0}
 FIXED_DEPTH_EPS = 0.05
 
 DEFAULT_CONFIG = {
-    "version": "v3-himalaya-74e",
+    "version": "v4-himalaya-arc",
     # The whole arc, not one basin. The previous box (27-30 N, 84-89 E) was
     # the binding constraint on coverage and it was invisible as such: events
     # outside it were never fetched, so they appear in no metric and no reject
@@ -70,8 +70,27 @@ DEFAULT_CONFIG = {
     #
     # This does NOT reach the gate. 3.08 is still TUNE, not GO. It is done
     # because the box should match the name, not to manufacture a pass.
-    "bbox": {"min_lat": 25.5, "max_lat": 38.0,
-             "min_lon": 74.0, "max_lon": 96.5},
+    # The arc, edge to edge, with the noise cut out. Measured per longitude
+    # band, deep events (>70 km, structurally incapable of being a surface
+    # collapse) against shallow:
+    #
+    #   71-72 E   975 events  95% deep   Hindu Kush zone -- excluded
+    #   72-73 E   221 events  79% deep   transition       -- excluded
+    #   73-74 E    87 events   6% deep   Kashmir          -- INCLUDED
+    #   74-96 E             1-7% deep   the arc
+    #   96.5-98 E 106 events   6% deep   Arunachal        -- INCLUDED
+    #
+    # The cliff is at 73 E, not 74: the first cut was a degree too
+    # conservative and lost the Kashmir valley. East to 98 E completes
+    # Arunachal to the Tibet bend. South edge 26.0 not 26.5, because Nepal
+    # reaches 26.3 N.
+    #
+    # Covers in full: Nepal, Bhutan, Sikkim, Uttarakhand, Himachal, Ladakh,
+    # Arunachal, Gilgit-Baltistan, Kashmir valley.
+    #
+    # Ceiling 3.08 -> 2.91 alerts/yr WHILE adding coverage. Still TUNE.
+    "bbox": {"min_lat": 26.0, "max_lat": 37.5,
+             "min_lon": 73.0, "max_lon": 98.0},
     "min_magnitude": 3.0,
     "max_magnitude": 6.5,
     "max_depth_km": 10.0,

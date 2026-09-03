@@ -86,15 +86,15 @@
       "NSIDC HMA Near-Global Glacial Lake Inventory v1 (2015-2018)"
     ],
     "bbox": [
-      26.0,
-      74.5,
-      37.5,
-      96.0
+      26.5,
+      73.5,
+      37.0,
+      97.5
     ],
-    "glaciers": 68907,
-    "lakes": 1305,
-    "total": 70212,
-    "built": "2026-09-03T04:20:04.979183+00:00",
+    "glaciers": 73187,
+    "lakes": 1528,
+    "total": 74715,
+    "built": "2026-09-03T06:53:54.407112+00:00",
     "why": "The Nepal-box registry could not see Kedarnath (510 km outside) or Chamoli (449 km outside). Built by script so the extent is auditable and reproducible.",
     "built_by": "scripts/build_hazard_registry.py"
   },

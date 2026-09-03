@@ -45,7 +45,7 @@ DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 # The western edge was 71.0 E. That put 9,979 sites in the Hindu Kush and
 # Pamir which the detector, after narrowing to 74.0 E, could never reach:
 # sites that can never fire are not coverage, they are weight.
-HIMALAYA = {"min_lat": 26.0, "max_lat": 37.5, "min_lon": 74.5, "max_lon": 96.0}
+HIMALAYA = {"min_lat": 26.5, "max_lat": 37.0, "min_lon": 73.5, "max_lon": 97.5}
 
 
 def in_box(lat, lon, b):
