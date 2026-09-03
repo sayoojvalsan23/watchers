@@ -568,18 +568,6 @@ def render(s):
         f"<div style='background:{'var(--ok)' if b['ok'] else 'var(--bad)'}'></div>"
         for b in beats[-240:]) or "<div style='background:var(--line)'></div>"
 
-    rows = "".join(
-        f"<tr><td>{_when(r['decided_at'])}</td>"
-        f"<td class='t-{r['tier']}'>{r['tier'].upper()}</td>"
-        f"<td>{r['score']}</td>"
-        f"<td>M{r['magnitude']}</td><td>{r['depth_km']} km</td>"
-        f"<td>{(r['nearest_site'] or '')[:22]}</td>"
-        f"<td>{r['nearest_km'] if r['nearest_km'] is not None else ''}</td>"
-        f"<td>{'yes — ' + (r['suppress_reason'] or '') if r['suppressed'] else ''}</td></tr>"
-        for r in s.get("recent", [])) or \
-        "<tr><td colspan=8 class=sub>no non-reject decisions yet — expected; "\
-        "six of twelve backtested years had none</td></tr>"
-
     seen_rows = "".join(
         f"<tr><td>{_when(r['observed_at'])}</td>"
         f"<td class='t-{r['tier']}' title=\""
@@ -717,11 +705,6 @@ def render(s):
     <tr><th>reason</th><th>n</th></tr>{rej_rows}
   </table></div>
 
-  <h2>recent decisions <span class=sub>rejects hidden</span></h2>
-  <div class=scroll><table>
-    <tr><th>decided</th><th>tier</th><th>score</th><th>mag</th><th>depth</th>
-        <th>nearest hazard</th><th>km</th><th>suppressed</th></tr>{rows}
-  </table></div>
 </div>"""
 
 
