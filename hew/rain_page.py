@@ -189,11 +189,18 @@ color:var(--fg3);font-size:11px;text-transform:uppercase;letter-spacing:.12em}
 # it. If the map shows hills where the screen sees none, that is a real bug
 # worth seeing.
 
-ELEV_BANDS = [(1400, "#4a4038"), (900, "#3d382f"), (500, "#333026"),
-              (200, "#2a2a22"), (60, "#22241f"), (-100, "#1b1f22")]
+# Six bands compressed into luminance 30-66 rendered as one flat olive smear,
+# and the legend swatches were indistinguishable from each other. Same hues,
+# spread across luminance 26-100 so the ramp reads as relief. Still dark: the
+# watch-cell overlay sits on top and has to stay the brightest thing here.
+ELEV_BANDS = [(1400, "#6f6250"), (900, "#584d3f"), (500, "#433c31"),
+              (200, "#333025"), (60, "#25261e"), (-100, "#171b1f")]
 
 
-def _coverage_map(cells, W=620, H=740):
+LEGEND_W = 190
+
+
+def _coverage_map(cells, W=None, H=740):
     """Kerala terrain with the watch cells on it. Drawn from the scan itself."""
     import os as _os
     from . import terrain as _t
@@ -215,6 +222,11 @@ def _coverage_map(cells, W=620, H=740):
     # always the binding constraint and fitting to width wastes the canvas.
     scale = (H - 2 * pad_t) / hh
     map_w = ww * scale
+    # Kerala is ~2.7x taller than wide, so a fixed-width canvas left 58% of it
+    # blank -- a 262 px map floating in 620 px. Size the canvas to what is
+    # actually drawn instead.
+    if W is None:
+        W = int(pad_l + map_w + 22 + LEGEND_W)
 
     def px(lon):
         return pad_l + (lon - lon0) * kx * scale
@@ -260,17 +272,19 @@ def _coverage_map(cells, W=620, H=740):
     marks = ""
     # dy staggers labels that would otherwise collide -- Chooralmala and
     # Puthumala are 4 km apart and overprinted into an unreadable smear.
-    for nm, la, lo, dy in (("Chooralmala", 11.4865, 76.1557, -7),
-                           ("Puthumala", 11.490, 76.100, 9),
-                           ("Kavalappara", 11.310, 76.290, 4),
-                           ("Pettimudi", 10.167, 77.050, 4),
-                           ("Koottickal", 9.5841, 76.8854, 4)):
+    # dx as well as dy: Chooralmala and Puthumala are 4 km apart, so staggering
+    # only vertically still ran the lower label back through the upper marker.
+    for nm, la, lo, dx, dy in (("Chooralmala", 11.4865, 76.1557, 9, -8),
+                               ("Puthumala", 11.490, 76.100, 9, 14),
+                               ("Kavalappara", 11.310, 76.290, 9, 4),
+                               ("Pettimudi", 10.167, 77.050, 9, 4),
+                               ("Koottickal", 9.5841, 76.8854, 9, 4)):
         x, y = px(lo), py(la)
         marks += ('<circle cx="%.1f" cy="%.1f" r="4.5" fill="none" '
                   'stroke="#e8eaf0" stroke-width="1.6"/>'
                   '<circle cx="%.1f" cy="%.1f" r="1.5" fill="#e8eaf0"/>'
                   '<text x="%.1f" y="%.1f" fill="#e8eaf0" font-size="10.5">%s</text>'
-                  % (x, y, x, y, x + 8, y + dy, _esc(nm)))
+                  % (x, y, x, y, x + dx, y + dy, _esc(nm)))
 
     lx = pad_l + map_w + 22
     n_steep = sum(1 for c in cells if c.get("band") == "steep")
