@@ -13,6 +13,10 @@ accumulations as arguments precisely so it can be tested offline.
 import json
 import os
 
+_REAL_DATA = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+import os
+
 import pytest
 
 from hew import rain_watch, terrain
@@ -548,6 +552,19 @@ def test_full_page_renders_with_conditions(tmp_path, monkeypatch):
                          "mm_3h": 0.0, "mm_24h": 23.1, "mm_72h": 31.3,
                          "places": ["Edakkara"]}]}
     (tmp_path / "latest_conditions.json").write_text(json.dumps(cond))
+
+    # render() early-returns a "no calibration data" stub unless the KSDMA
+    # files are present, so pointing DATA_DIR at a directory holding only
+    # latest_conditions.json never reached the conditions table at all --
+    # the test asserted on a page it was never rendering. Copy the real
+    # calibration alongside, which is what "the way the device does" means.
+    import shutil
+    for name in ("ksdma_calibration.json", "ksdma_climatology.json"):
+        src = os.path.join(_REAL_DATA, name)
+        if os.path.exists(src):
+            shutil.copy(src, tmp_path / name)
+
     monkeypatch.setattr(rain_page, "DATA_DIR", str(tmp_path))
     html = rain_page.render(status.CSS)
+    assert "No calibration data" not in html, "fixture is incomplete again"
     assert len(html) > 1000 and "Edakkara" in html
