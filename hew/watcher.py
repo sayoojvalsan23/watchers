@@ -193,6 +193,23 @@ class Watcher:
                 except Exception as e:
                     log.error("operator notify failed: %s", e)
 
+            # A WATCH that was CAPPED rather than scored low: unknown depth
+            # sitting on a mapped hazard. Nothing told the operator about
+            # these, so on 26 Aug 2026 the first human signal was the
+            # characterised record 13 h later. Heads-up only -- it does not
+            # touch the dispatch path below, and it stays at info priority
+            # because ~46/yr is expected.
+            elif r["tier"] == "watch" and "unknown_depth" in (r.get("factors") or ()):
+                try:
+                    from . import hew_operator as operator
+                    if operator.configured():
+                        operator.unresolved_watch(
+                            r["score"], r["nearest_site"], r["nearest_km"],
+                            r.get("nearest_kind"), f["depth"], f["mag"],
+                            r.get("factors") or ())
+                except Exception as e:
+                    log.error("operator watch notify failed: %s", e)
+
             if r["tier"] in ("advisory", "warning") and not suppressed:
                 ok, err = self.dispatcher.send(r["tier"], f, r, corridor)
                 self.store.record_alert(did, self.dispatcher.channel,

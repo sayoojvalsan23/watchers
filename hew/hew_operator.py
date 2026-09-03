@@ -167,6 +167,49 @@ def detection(tier, score, site, km, corridor_n=None, first=None):
                 kind="detection", tags=["ocean"])
 
 
+def unresolved_watch(score, site, km, kind, depth, mag, factors):
+    """
+    A WATCH that was capped, not scored low -- sent to the operator.
+
+    The gap this closes: on 26 August 2026 the feed carried the collapse as
+    M4.4 / type=earthquake / 10 km, and 10 km is a catalogue default meaning
+    depth UNCONSTRAINED. That record scores WATCH, is written to the ledger,
+    and until now notified nobody -- the operator first heard about it when
+    the characterised record arrived 13 h 06 m later. Waiting on USGS to
+    re-type an event is not a plan.
+
+    So: when depth is unknown AND the event sits on a mapped hazard, tell the
+    operator. This is a heads-up, not a detection. Priority stays at info,
+    BELOW detection, because roughly 46 of these are expected per year
+    (531 such events in 11.67 years of real catalogue) and an operator notice
+    that fires every eight days must never sound like the one that means the
+    watcher has died.
+
+    Sent at DETECTION priority, not info: the whole point is that the 08:37
+    record must reach a human while it still matters, and a notice you do not
+    look at for six hours is the same as no notice. Still not priority 5 --
+    that one is reserved for "the watcher is dead", and a signal that fires
+    every eight days would drown the one that fires once a year.
+
+    It cannot become a dispatch. Nothing here touches the dispatch path.
+    """
+    lines = [
+        f"WATCH — score {score} (capped, not scored low)",
+        f"M{mag}, depth {depth} km — DEPTH UNCONSTRAINED (catalogue default)",
+        f"nearest mapped hazard: {site} ({km} km, {kind})",
+        f"factors: {', '.join(factors)}",
+        "",
+        "Why you are seeing this: depth is the discriminator between a",
+        "surface collapse and an ordinary earthquake, and this record has",
+        "none. It sits on a mapped hazard, so it is worth a human glance.",
+        "",
+        "OPERATOR NOTICE — for review only. Not a detection, not a warning.",
+        "Dispatch is OFF. Nobody downstream has been notified.",
+    ]
+    return send(title="HEW watch — unknown depth on a mapped hazard",
+                body="\n".join(lines), kind="detection", tags=["eyes"])
+
+
 def rain_watch(pct, window_h, band, places, n_more=0, at=None, test=False):
     """
     A rainfall WATCH, pushed to the operator's own phone.
