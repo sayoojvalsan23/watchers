@@ -178,9 +178,15 @@ def snapshot(db):
 
         # Highest tier decided in the last 24 h, for the headline banner.
         since24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        # Keyed on when the EVENT happened, not when we evaluated it. A
+        # backfilled decision is stamped decided_at = now, so keying on that
+        # would put a week-old collapse in the last-24h window and light the
+        # banner for history. observed_at is also the honest field for a live
+        # event: the operator cares when the ground moved.
         out["recent_tiers"] = {r["tier"]: r["n"] for r in c.execute(
             "SELECT d.tier, COUNT(*) n FROM decisions d"
-            " WHERE d.decided_at > ? GROUP BY d.tier", (since24,))}
+            " JOIN candidates c2 ON c2.id = d.candidate_id"
+            " WHERE c2.observed_at > ? GROUP BY d.tier", (since24,))}
 
         # The most recent real decision, with NO time window. The banner
         # covers 24 h; without this, someone returning after two days sees
@@ -188,10 +194,10 @@ def snapshot(db):
         # means is "nothing since yesterday". The window boundary must not
         # be able to hide a detection.
         r = c.execute(
-            "SELECT d.tier, d.score, d.decided_at, d.nearest_site,"
-            " d.nearest_km, c.magnitude, c.depth_km"
+            "SELECT d.tier, d.score, c.observed_at AS decided_at,"
+            " d.nearest_site, d.nearest_km, c.magnitude, c.depth_km"
             " FROM decisions d JOIN candidates c ON c.id = d.candidate_id"
-            " WHERE d.tier != 'reject' ORDER BY d.decided_at DESC LIMIT 1"
+            " WHERE d.tier != 'reject' ORDER BY c.observed_at DESC LIMIT 1"
         ).fetchone()
         out["last_detection"] = dict(r) if r else None
 
