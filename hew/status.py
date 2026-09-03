@@ -197,6 +197,7 @@ def snapshot(db):
         # of a working filter look identical without this.
         out["seen"] = [dict(r) for r in c.execute(
             "SELECT c.external_id, c.observed_at, c.magnitude, c.depth_km,"
+            " c.lat, c.lon,"
             " d.score, d.tier, d.factors, d.nearest_site, d.nearest_km,"
             " d.suppressed, d.suppress_reason, d.decided_at"
             " FROM decisions d JOIN candidates c ON c.id = d.candidate_id"
@@ -386,12 +387,36 @@ _WHY = {
 }
 
 
+def _place_cell(r):
+    """
+    Where it happened, as a map pin.
+
+    Shown for EVERY row including log. A log is still a real event at a real
+    place -- the detector looked and was unimpressed -- and "where was that?"
+    is the first question anyone asks of any row. The registry id it used to
+    show (RGI2000-v7.0-G-14-03432) answers that for nobody.
+    """
+    lat, lon = r.get("lat"), r.get("lon")
+    if lat is None or lon is None:
+        return html.escape(str(r.get("nearest_site") or "")[:20])
+    return ('<a href="https://www.google.com/maps?q=%.4f,%.4f" target="_blank" '
+            'rel="noopener">%.2f N, %.2f E</a>' % (lat, lon, lat, lon))
+
+
+
 def _why_tier(tier, score, factors, nearest_km=None):
     """One line per reason, for a tooltip."""
     try:
         fs = json.loads(factors) if isinstance(factors, str) else list(factors or [])
         if isinstance(fs, str):
-            fs = [x.strip() for x in fs.strip("()[]").replace("'", "").split(",") if x.strip()]
+            fs = [x.strip() for x in fs.strip("()[]").replace("'", "").split(",")]
+        # Defensive: a double-encoded write once stored factors as a list of
+        # single characters, and this rendered a tooltip one letter per line.
+        # Single-character entries are never a factor name, so rejoin them.
+        if fs and all(isinstance(x, str) and len(x) <= 1 for x in fs):
+            fs = [t.strip().strip('"') for t in
+                  "".join(fs).strip("[]").split(",")]
+        fs = [x for x in fs if isinstance(x, str) and x.strip()]
     except Exception:
         fs = []
 
@@ -563,7 +588,7 @@ def render(s):
         f"{r['tier'].upper()}</td>"
         f"<td>{r['score']}</td>"
         f"<td>M{r['magnitude']}</td><td>{r['depth_km']} km</td>"
-        f"<td>{(r['nearest_site'] or '')[:20]}</td>"
+        f"<td>{_place_cell(r)}</td>"
         f"<td>{r['nearest_km'] if r['nearest_km'] is not None else ''}</td>"
         f"<td class=sub>{(r['suppress_reason'] or r['factors'] or '')[:44]}</td></tr>"
         for r in s.get("seen", [])) or \

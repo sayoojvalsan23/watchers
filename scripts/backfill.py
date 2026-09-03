@@ -98,8 +98,12 @@ def main():
         cid, _is_new, _changed = store.upsert_candidate(
             f["external_id"], f["observed_at"], f["lat"], f["lon"],
             f["depth_km"], f["magnitude"], "usgs", f["raw"])
+        # record_decision does json.dumps(list(factors)) itself. Passing an
+        # already-encoded string made list() explode it into single
+        # characters, so every backfilled row stored ["[", "\"", "u", ...]
+        # and the tier tooltip rendered one letter per line.
         store.record_decision(cid, cfg["version"], r["score"], r["tier"],
-                              json.dumps(list(r["factors"])),
+                              r["factors"],
                               r["nearest_site"], r["nearest_km"],
                               suppressed=True, suppress_reason="backfill")
         written += 1
