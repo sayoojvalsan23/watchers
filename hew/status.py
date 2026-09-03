@@ -456,6 +456,77 @@ def _why_tier(tier, score, factors, nearest_km=None):
 
 
 
+def _blind_spots(s):
+    """
+    What this system cannot see, stated plainly and in one place.
+
+    The page is now good at saying "here is what I saw". That quietly raises
+    the risk of someone reading silence as safety -- and the honest facts
+    about what is invisible are scattered across a 900-line CONSTRAINTS.md,
+    one amber word in a data table, and the edge of a map.
+
+    The project's discipline is that a status page asserts nothing it has not
+    read. This is the mirror of that rule: say plainly what it has not looked
+    at. Every line below is a measured number, not a caveat someone felt they
+    ought to add.
+    """
+    b = None
+    try:
+        from .detect import DEFAULT_CONFIG
+        b = DEFAULT_CONFIG["bbox"]
+    except Exception:
+        pass
+
+    lake_age = None
+    for d in (s.get("data_age") or []):
+        if d["name"] == "glacial_lakes_hma" and d.get("epoch_days"):
+            lake_age = d["epoch_days"] / 365.0
+
+    items = []
+    if b:
+        items.append(
+            "Anything outside <b>%.0f&ndash;%.0f&deg;E, %.0f&ndash;%.0f&deg;N</b>. "
+            "Not watched is not the same as safe."
+            % (b["min_lon"], b["max_lon"], b["min_lat"], b["max_lat"]))
+    items += [
+        "<b>Landslides that leave no catalogue record.</b> Rasuwagadhi 2025 "
+        "produced no USGS event of any magnitude within 40 km, in the whole "
+        "year. There was nothing to detect, at any threshold.",
+
+        "<b>Collapses below about M4.0.</b> That is where USGS magnitude "
+        "completeness stops in this box &mdash; not where the danger stops.",
+
+        "<b>Collapses triggered by a large earthquake.</b> Replayed against "
+        "the real Gorkha M7.8 window &mdash; 76 catalogued events within "
+        "80 km &mdash; this produces <b>zero</b> detections. It is silent "
+        "during the period of maximum landslide risk.",
+
+        "<b>Anything early enough to warn.</b> For 26 August 2026 the usable "
+        "record arrived <b>13 h 06 m after the slope failed</b>. That is a "
+        "property of the feed, and no threshold changes it.",
+    ]
+    if lake_age:
+        items.append(
+            "<b>Glacial lakes formed in the last %.0f years.</b> The "
+            "inventory is the 2015&ndash;2018 survey. Lakes form and grow as "
+            "glaciers retreat, so the newest ones &mdash; the dangerous ones "
+            "&mdash; are not on the map." % lake_age)
+    items += [
+        "<b>Rain and river level.</b> The seismic watcher reads neither. The "
+        "rainfall track covers Kerala only, not this box.",
+    ]
+
+    return (
+        '<h2>what this cannot see <span class=sub>the honest half</span></h2>'
+        '<div class=note>' + "".join(
+            '<div style="margin:7px 0">&middot;&nbsp; %s</div>' % i for i in items) +
+        '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">'
+        '<b>This will not call anyone.</b> Nothing here is sent to any member '
+        'of the public. Dispatch is off, and who gets told is a decision for a '
+        'partner institution, not for software.</div></div>')
+
+
+
 def _coverage_svg(W=880, H=330):
     """
     What area is being watched, and where the hazards in it are.
@@ -657,6 +728,7 @@ def render(s):
                                    .load_registry()))
     except Exception:
         covmap, nsites = "", "the"
+    blind = _blind_spots(s)
 
     g = gaps(s.get("beats", []))
     beats = [b for b in s.get("beats", []) if b["source"] == "usgs_catalogue"]
@@ -772,6 +844,8 @@ def render(s):
   outside the box, or inside it with no shading, produces no decision, and
   that is not the same as it being safe.</div>
   {covmap}
+
+  {blind}
 
   <h2>data age <span class=sub>static layers</span></h2>
   <div class=note>Glacial lakes <b>form and grow</b> as glaciers retreat, so a

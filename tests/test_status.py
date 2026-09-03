@@ -196,3 +196,22 @@ def test_the_all_clear_never_claims_more_than_24h(snap):
     """The banner must say which window it speaks for."""
     h = _banner(snap, poll_age=27, canary_age=300, recent_tiers={})
     assert "NOTHING DETECTED" not in h
+
+
+def test_the_page_says_what_it_cannot_see(snap):
+    """
+    The page is good at reporting what it saw. That raises the risk of a
+    reader taking silence for safety, so the blind spots must be stated on
+    the page itself -- not left in CONSTRAINTS.md where nobody looks.
+
+    These assertions are deliberately about CONTENT, not wording: each names
+    a measured limitation that is currently true. If one stops being true,
+    this test should fail and the claim should come off the page.
+    """
+    h = _banner(snap, poll_age=27, canary_age=300, recent_tiers={})
+    assert "what this cannot see" in h
+    assert "Rasuwagadhi 2025" in h        # no catalogue record exists at all
+    assert "13 h 06 m" in h               # D5, the feed latency
+    assert "zero" in h                    # D9, Gorkha replay
+    assert "M4.0" in h                    # D4, magnitude completeness
+    assert "will not call anyone" in h    # dispatch is off, said plainly
