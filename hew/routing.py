@@ -43,6 +43,21 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
+# Coarse spatial index. snap() and snap_candidates() scanned every vertex in
+# the network: fine at 3,050 Trishuli ways, 2.66 M haversine calls once the
+# layer became Himalaya-wide, which took a drill from well under a second to
+# 17.5 s and made cloudflared return 502 before the page rendered.
+#
+# Bins hold WAY indices, not vertices. A per-vertex index would undo the
+# memory work -- 2.66 M entries is exactly what was just removed from
+# node_index -- while a per-way index is ~20 k ways over a few bins each.
+_BIN = 0.05                       # ~5.5 km
+
+
+def _bin_of(lat, lon):
+    return (int(math.floor(lat / _BIN)), int(math.floor(lon / _BIN)))
+
+
 class _Way:
     """
     One channel, stored compactly.
@@ -91,6 +106,26 @@ class RiverNetwork:
                 if nid in terminal:
                     self.node_index.setdefault(nid, []).append((wi, pos))
             self.ways.append(_Way(w))
+        self._build_index()
+
+    def _build_index(self):
+        """bin -> way indices whose geometry touches that bin."""
+        self.bins = {}
+        for wi, w in enumerate(self.ways):
+            seen = set()
+            for i in range(len(w.lat)):
+                b = _bin_of(w.lat[i], w.lon[i])
+                if b not in seen:
+                    seen.add(b)
+                    self.bins.setdefault(b, []).append(wi)
+
+    def _nearby_ways(self, lat, lon, rings):
+        b0, b1 = _bin_of(lat, lon)
+        out = set()
+        for i in range(b0 - rings, b0 + rings + 1):
+            for j in range(b1 - rings, b1 + rings + 1):
+                out.update(self.bins.get((i, j), ()))
+        return out
 
     @classmethod
     def load(cls, path=None):
@@ -153,6 +188,7 @@ class RiverNetwork:
             # of entries that could never be queried.
             for nid, pos in h["junctions"]:
                 self.node_index.setdefault(nid, []).append((wi, pos))
+        self._build_index()
         return self
 
     def name(self, wi):
@@ -161,12 +197,19 @@ class RiverNetwork:
     def snap(self, lat, lon):
         """Nearest network vertex. Returns (way_index, position, distance_km)."""
         best = (None, None, float("inf"))
-        for wi, w in enumerate(self.ways):
-            wlat, wlon = w.lat, w.lon
-            for pos in range(len(wlat)):
-                d = haversine_km(lat, lon, wlat[pos], wlon[pos])
-                if d < best[2]:
-                    best = (wi, pos, d)
+        # Grow the search box until the best hit found is closer than the box
+        # edge; only then is it provably the global nearest. Falls back to the
+        # full scan if the network is empty around this point.
+        for rings in (1, 2, 4, 8, 16, 32):
+            for wi in self._nearby_ways(lat, lon, rings):
+                w = self.ways[wi]
+                wlat, wlon = w.lat, w.lon
+                for pos in range(len(wlat)):
+                    d = haversine_km(lat, lon, wlat[pos], wlon[pos])
+                    if d < best[2]:
+                        best = (wi, pos, d)
+            if best[0] is not None and best[2] <= rings * _BIN * 111.0:
+                return best
         return best
 
     def _next_way(self, node_id, from_way):
@@ -236,7 +279,11 @@ def snap_candidates(net, lat, lon, radius_km):
     whole corridor.
     """
     best = {}
-    for wi, w in enumerate(net.ways):
+    # Everything within radius_km lies inside this many bins, so ways outside
+    # it cannot contribute a candidate. Exact, not approximate.
+    rings = int(radius_km / (_BIN * 111.0)) + 1
+    for wi in net._nearby_ways(lat, lon, rings):
+        w = net.ways[wi]
         nm = w.name
         wlat, wlon = w.lat, w.lon
         for pos in range(len(wlat)):
