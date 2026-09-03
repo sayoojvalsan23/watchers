@@ -90,9 +90,26 @@ def test_ranking_is_transparent():
 
 
 def test_exposure_survives_hazards_with_no_routed_corridor():
-    """The river network covers one basin; the registry covers the whole box.
-    Hazards outside the routed basin must return 0, not raise."""
-    sites = [{"name": "outside", "lat": 27.0, "lon": 88.5, "distance_km": 10,
+    """
+    A hazard with no channel within reach must return 0, not raise.
+
+    THE POINT MOVED, AND THE ASSERTION DID NOT. It was 27.0, 88.5 -- chosen
+    when the river layer was one basin, so nothing was mapped there. The
+    Himalaya-wide layer (3,050 -> 20,183 ways) put a real channel 2.9 km from
+    that spot with 12 genuinely downstream settlements, so the old location
+    stopped testing what the test is named for: it had become a routed
+    corridor, and 0 was no longer the correct answer.
+
+    Changing the expectation to 12 would have kept the suite green and thrown
+    the test away -- it would then assert only that one arbitrary spot has 12
+    villages, which no one needs to know.
+
+    27.50, 71.50 is the most isolated point in the box: 142 km from the
+    nearest mapped channel, well past max_snap_km (10 km), so trace() refuses
+    and the corridor is genuinely absent. Verified by grid search over the
+    whole bbox, not picked by eye.
+    """
+    sites = [{"name": "outside", "lat": 27.50, "lon": 71.50, "distance_km": 10,
               "area_km2": 1.0, "slope_deg": 30, "priority": 50}]
     out = cascade.with_exposure(sites, top_n=1)
     assert out[0]["downstream_settlements"] == 0
