@@ -22,6 +22,7 @@ It shows state. It does not change any.
 """
 
 import argparse
+import html
 import json
 import os
 import re
@@ -181,6 +182,19 @@ def snapshot(db):
             "SELECT d.tier, COUNT(*) n FROM decisions d"
             " WHERE d.decided_at > ? GROUP BY d.tier", (since24,))}
 
+        # The most recent real decision, with NO time window. The banner
+        # covers 24 h; without this, someone returning after two days sees
+        # "nothing" and reads it as "nothing has happened", when what it
+        # means is "nothing since yesterday". The window boundary must not
+        # be able to hide a detection.
+        r = c.execute(
+            "SELECT d.tier, d.score, d.decided_at, d.nearest_site,"
+            " d.nearest_km, c.magnitude, c.depth_km"
+            " FROM decisions d JOIN candidates c ON c.id = d.candidate_id"
+            " WHERE d.tier != 'reject' ORDER BY d.decided_at DESC LIMIT 1"
+        ).fetchone()
+        out["last_detection"] = dict(r) if r else None
+
         out["data_age"] = _data_age()
 
         out["recent"] = [dict(r) for r in c.execute(
@@ -322,9 +336,37 @@ def render(s):
         cls, hdr, why = ("warn", "CANARY STALE",
                          f"polling, but the canary last passed {cage/3600:.1f} h ago")
     else:
-        cls, hdr, why = ("ok", "NOTHING DETECTED",
+        cls, hdr, why = ("ok", "NOTHING IN LAST 24 H",
                          f"system healthy · last poll {age:.0f}s ago · "
                          f"canary {('%.0f min' % (cage/60)) if cage is not None else 'n/a'} ago")
+
+    ld = s.get("last_detection")
+    if ld:
+        d_age = _age(ld["decided_at"])
+        if d_age is None:
+            ago = "unknown"
+        elif d_age < 3600:
+            ago = "%.0f min ago" % (d_age / 60)
+        elif d_age < 86400:
+            ago = "%.1f h ago" % (d_age / 3600)
+        else:
+            ago = "%.1f days ago" % (d_age / 86400)
+        last_line = (
+            '<div class=note style="margin-top:10px">'
+            '<b>LAST DETECTION</b> &nbsp;<span class="t-{t}">{T}</span> '
+            '&nbsp;{ago} &nbsp;·&nbsp; score {sc} &nbsp;·&nbsp; M{mag}, '
+            'depth {dep} km &nbsp;·&nbsp; {site} ({km} km)'
+            '<div class=sub>Shown regardless of the 24 h window above, so a '
+            'detection cannot be hidden by having happened yesterday.</div>'
+            '</div>'
+        ).format(t=ld["tier"], T=ld["tier"].upper(), ago=ago, sc=ld["score"],
+                 mag=ld["magnitude"], dep=ld["depth_km"],
+                 site=html.escape(str(ld["nearest_site"] or "")[:34]),
+                 km=ld["nearest_km"])
+    else:
+        last_line = ('<div class=note style="margin-top:10px">'
+                     '<b>LAST DETECTION</b> &nbsp;<span class=sub>none on '
+                     'record in this database</span></div>')
 
     g = gaps(s.get("beats", []))
     beats = [b for b in s.get("beats", []) if b["source"] == "usgs_catalogue"]
@@ -411,6 +453,7 @@ def render(s):
     <div class=big>{hdr}</div>
     <div class=sub>{why}</div>
   </div>
+  {last_line}
 
   {cyc}
 

@@ -128,9 +128,11 @@ def snap(db):
     return st.snapshot(db)
 
 
-def test_quiet_and_healthy_says_nothing_detected(snap):
+def test_quiet_and_healthy_names_the_window_it_covers(snap):
+    """"NOTHING DETECTED" claimed more than the banner knows: it covers 24 h.
+    Renamed to say so, so a reader cannot take it for an all-time all-clear."""
     h = _banner(snap, poll_age=27, canary_age=300, recent_tiers={})
-    assert "NOTHING DETECTED" in h
+    assert "NOTHING IN LAST 24 H" in h
     assert "system healthy" in h
 
 
@@ -174,3 +176,23 @@ def test_a_warning_outranks_a_stale_poller(snap):
 def test_canary_staleness_still_surfaces_when_quiet(snap):
     h = _banner(snap, poll_age=27, canary_age=99999, recent_tiers={})
     assert "CANARY STALE" in h
+
+
+def test_last_detection_survives_the_24h_window(snap):
+    """
+    A WATCH 30 hours ago must not be hidden by a banner that covers 24.
+
+    Someone returning after two days would otherwise see a green all-clear
+    and read it as "nothing has happened", when it means "nothing since
+    yesterday". The window boundary must not be able to hide a detection.
+    """
+    h = _banner(snap, poll_age=27, canary_age=300, recent_tiers={})
+    assert "NOTHING IN LAST 24 H" in h      # the window is named, not implied
+    assert "LAST DETECTION" in h            # and the older one is still shown
+    assert "WARNING" in h                   # the fixture's 2026-08-31 decision
+
+
+def test_the_all_clear_never_claims_more_than_24h(snap):
+    """The banner must say which window it speaks for."""
+    h = _banner(snap, poll_age=27, canary_age=300, recent_tiers={})
+    assert "NOTHING DETECTED" not in h
