@@ -1,6 +1,6 @@
 # Constraints
 
-Last reviewed: 2026-09-02 (D13, D14 closed; D15 mitigated -- **Phase 0 ceiling is 3.77 alerts/yr, TUNE. The gate is not passed.**)
+Last reviewed: 2026-09-03 (western edge 70.5 -> 74.0 E; **Phase 0 ceiling is 3.08 alerts/yr, TUNE. The gate is still not passed.**)
 
 This is a life-safety system. The rules below are not style preferences and
 they are not subject to agent judgement. An agent that finds one of these
@@ -112,20 +112,20 @@ of warning capability.
 
 ## Measured, not yet enforced
 
-| Metric | Today (2026-09-02) | Direction |
+| Metric | Today (2026-09-03) | Direction |
 |--------|--------------------|-----------|
-| **Phase 0, REAL registry** | **1.20 /yr — GO** | the number that counts |
-| Registry | **82,152 sites** (80,679 RGI glaciers + 1,473 HMA lakes) | was 331 lakes in a Nepal box (D15) |
+| **Phase 0, REAL registry** | **0.86 /yr — GO** | the number that counts |
+| Registry | **70,212 sites** (68,907 RGI glaciers + 1,305 HMA lakes) | inset 0.5 deg inside the detector box; 11,940 sites west of 74 E were unreachable and are gone |
 | Calibrated hazard radius | 11.0 km, 95% CI [8.2, 20.9] | n=22; 15.0 sits inside the CI |
 | 26 Aug 2026, real registry | WARNING, score 84, nearest lake 10.0 km | was 0.0 km by construction |
 |--------|--------------------|-----------|
-| Phase 0 ceiling false-alarm rate | **3.77 /yr — EXCEEDS THE 2.00 GATE** | widening the box 20x did this; TUNE, not GO (D15) |
+| Phase 0 ceiling false-alarm rate | **3.08 /yr — EXCEEDS THE 2.00 GATE** | 3.77 before the western edge moved to 74 E; still TUNE, not GO |
 | Phase 0 floor (8-site registry) | 0.17 /yr | both alerts are true positives; not a false-alarm signal |
 | Curated recall — USGS-reachable | **1 of 1** | holds at 1 of 1 |
 | Curated recall — needs regional feed | **0 of 1** | blocked on feed, not on tuning |
 | USGS magnitude completeness, bbox | **M4.0** | feed limitation, not tunable |
 | Registry coverage vs ICIMOD inventory | Himalaya-wide; Kedarnath 3.3 km, Chamoli 1.6 km, Nanga Parbat 0.8 km | was 510 / 449 / 1,059 km OUTSIDE the box |
-| Catalogue events at default depth | 40.6% (1,618/3,982) | now capped at watch, not discarded |
+| Catalogue events at default depth | 72.8% (1,490/2,046) | share rose because the Hindu Kush deep-seismicity events that dominated the old box are gone |
 | Default-depth events within 15 km of a listed site | 4 of 462 | rises sharply with a real registry |
 | Catalogue latency to characterised record | **13 h 06 m** (26 Aug 2026) | not tunable; feed property |
 | Pipeline latency, record → corridor | 0.1 ms detect + 1.4 s route (2 branches) | not the bottleneck |
@@ -931,6 +931,7 @@ USGS FDSNWS. IMD publishes rainfall as JPEG bar charts.
 | D14 | **One idle browser socket silenced the whole status page.** `hew.status` ran on a single-threaded `HTTPServer` with no read timeout. A browser opens speculative connections and sends nothing on them; the handler then blocked in `readline()` and the entire server stopped answering -- `/health` included -- for 30 s at a time. Confirmed with `lsof`: a Chrome preconnect socket held `127.0.0.1:8770` ESTABLISHED while every request timed out. A separate defect with the same symptom (SQLite rollback-journal lock contention, writer blocking the read-only page for its full 5 s busy timeout) masked the diagnosis; WAL fixed that one and the hang remained. | **Fail-safe, never fail-open.** The liveness endpoint went dark precisely while the watcher was healthy and polling, so an uptime check could not distinguish a working system from a dead one. | **CLOSED 2026-09-02.** `ThreadingHTTPServer` + `Handler.timeout = 10`, and `store.py` opens the database in WAL. `/health` 12/12 at 0.75 ms under live write load; `/rain` 27 s -> 38 ms. |
 | D15 | **Registry and fetch box were the binding constraint on coverage, and were invisible as such.** The hazard registry and `config["bbox"]` both stopped at 27-30 N, 84-89 E. Events outside were never fetched, so they produced no candidate, no reject reason and no metric. Replayed: Kedarnath 2013 sat **510 km** outside, Chamoli/Rishiganga 2021 **449 km**, Namcha Barwa **602 km**, Nanga Parbat **1,059 km**. | An entire mountain range could not be seen, and nothing in any dashboard said so. A green HEALTHY badge over Uttarakhand meant only that nothing was looking. | **MITIGATED 2026-09-02.** Registry rebuilt Himalaya-wide from RGI 7.0 + NSIDC HMA: 5,906 -> **82,152** sites, all four events above now within 3.3 km of a mapped hazard, Langtang unchanged at 2.2 km. Box widened with a 0.5 deg margin so edge hazards keep a full detection radius. Built by `scripts/build_hazard_registry.py` -- the previous inventory had no build script, which is why its extent was never audited. **Phase 0 ceiling moved 1.89 -> 3.77 alerts/yr: TUNE, not GO. The gate is not passed.** |
 
+| D16 | **Half the catalogue was not Himalayan.** The box reached 70.5 E, which is the Hindu Kush and Pamir, not the Himalaya. That strip held **12% of mapped hazards but produced 49% of catalogue events** (1,936 of 3,982) -- the Hindu Kush intermediate-depth seismic zone emits a constant stream of 100-250 km events that can never be a surface collapse. The registry reached further west still (71.0 E), so 9,979 sites sat where the detector could not look: not coverage, weight. | Half of every Phase 0 denominator was noise from a range the project is not named after, and a tenth of the registry was unreachable. | **CLOSED 2026-09-03.** Box 74.0-96.5 E, registry inset to 74.5-96.0. Ceiling **3.77 -> 3.08**, measured **1.20 -> 0.86**. Every curated event survives -- Nanga Parbat (74.59 E) and Shishper (74.55 E) nearest the edge with ~65 km of margin, more than hazard_radius + source_uncertainty. **This does not reach the gate and was not done to.** |
 
 ## Exceptions
 

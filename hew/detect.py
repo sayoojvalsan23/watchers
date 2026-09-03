@@ -45,7 +45,7 @@ FIXED_DEPTHS = {5.0, 10.0, 33.0, 35.0}
 FIXED_DEPTH_EPS = 0.05
 
 DEFAULT_CONFIG = {
-    "version": "v2-himalaya",
+    "version": "v3-himalaya-74e",
     # The whole arc, not one basin. The previous box (27-30 N, 84-89 E) was
     # the binding constraint on coverage and it was invisible as such: events
     # outside it were never fetched, so they appear in no metric and no reject
@@ -57,8 +57,21 @@ DEFAULT_CONFIG = {
     # event 5 km outside is rejected as out-of-area even though it is well
     # inside hazard_radius_km (11) plus source_uncertainty_km (15). The margin
     # is 0.5 deg (~55 km), comfortably more than that 26 km interaction range.
+    # Western edge moved 70.5 -> 74.0 E. Everything west of 74 is the Hindu
+    # Kush and Pamir, not the Himalaya: it held 12% of mapped hazards but
+    # produced 49% of catalogue events (1,936 of 3,982), because the Hindu
+    # Kush intermediate-depth seismic zone emits a constant stream of
+    # 100-250 km events that can never be a surface collapse. Measured:
+    # ceiling 3.77 -> 3.08 alerts/yr, measured rate 1.20 -> 0.86.
+    #
+    # Every curated event survives, Nanga Parbat (74.59 E) and Shishper
+    # (74.55 E) closest to the edge with ~65 km of margin -- more than the
+    # 26 km hazard_radius + source_uncertainty interaction range.
+    #
+    # This does NOT reach the gate. 3.08 is still TUNE, not GO. It is done
+    # because the box should match the name, not to manufacture a pass.
     "bbox": {"min_lat": 25.5, "max_lat": 38.0,
-             "min_lon": 70.5, "max_lon": 96.5},
+             "min_lon": 74.0, "max_lon": 96.5},
     "min_magnitude": 3.0,
     "max_magnitude": 6.5,
     "max_depth_km": 10.0,

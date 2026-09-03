@@ -37,7 +37,15 @@ DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 # both the 2025 and 2026 sources originated (registry.py). West to Nanga Parbat
 # and the Karakoram, east to Namcha Barwa, north far enough to hold Ladakh and
 # the trans-Himalayan ranges.
-HIMALAYA = {"min_lat": 26.0, "max_lat": 37.5, "min_lon": 71.0, "max_lon": 96.0}
+# The registry sits INSIDE the detector's bbox, never outside it. detect.py
+# fetches 25.5-38.0 N, 74.0-96.5 E; this is that box inset by 0.5 deg, so a
+# hazard on the registry edge still has the full detector box around it --
+# more than hazard_radius_km (11) plus source_uncertainty_km (15).
+#
+# The western edge was 71.0 E. That put 9,979 sites in the Hindu Kush and
+# Pamir which the detector, after narrowing to 74.0 E, could never reach:
+# sites that can never fire are not coverage, they are weight.
+HIMALAYA = {"min_lat": 26.0, "max_lat": 37.5, "min_lon": 74.5, "max_lon": 96.0}
 
 
 def in_box(lat, lon, b):
