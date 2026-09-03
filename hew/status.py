@@ -112,6 +112,40 @@ def _data_age():
     return out
 
 
+# Local timezone of the machine, resolved once. Times are shown as UTC AND
+# local: UTC because every record in the ledger and every upstream feed is
+# UTC and that is what you quote when comparing notes with USGS, local
+# because that is what the operator's day is in.
+#
+# Note this is the SERVER's local time, not the event's. A Langtang event
+# happens in NPT (+05:45) while this Pi runs IST (+05:30) -- so the local
+# column answers "when did I need to know", not "what did the clock say on
+# the mountain". Labelling it avoids the confusion.
+try:
+    from zoneinfo import ZoneInfo
+    _LOCAL = datetime.now().astimezone().tzinfo
+    _LOCAL_NAME = datetime.now().astimezone().strftime("%Z") or "local"
+except Exception:
+    _LOCAL, _LOCAL_NAME = timezone.utc, "UTC"
+
+
+def _when(iso, with_date=True):
+    """'2026-08-26 02:52 UTC / 08:22 IST' from a stored ISO timestamp."""
+    if not iso:
+        return ""
+    try:
+        d = datetime.fromisoformat(str(iso))
+    except ValueError:
+        return str(iso)[:19].replace("T", " ")
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    u = d.astimezone(timezone.utc)
+    l = d.astimezone(_LOCAL)
+    stamp = u.strftime("%Y-%m-%d %H:%M" if with_date else "%H:%M")
+    return "%s UTC <span class=sub>%s %s</span>" % (
+        stamp, l.strftime("%H:%M"), _LOCAL_NAME)
+
+
 def _age(iso):
     if not iso:
         return None
@@ -195,9 +229,16 @@ def snapshot(db):
         # be able to hide a detection.
         r = c.execute(
             "SELECT d.tier, d.score, c.observed_at AS decided_at,"
-            " d.nearest_site, d.nearest_km, c.magnitude, c.depth_km"
+            " d.nearest_site, d.nearest_km, c.magnitude, c.depth_km,"
+            " c.lat, c.lon, c.external_id, d.factors"
             " FROM decisions d JOIN candidates c ON c.id = d.candidate_id"
-            " WHERE d.tier != 'reject' ORDER BY c.observed_at DESC LIMIT 1"
+            # watch/advisory/warning only. 'reject' is obvious, but 'log' is
+            # the trap: it means evaluated and scored BELOW watch, i.e. the
+            # detector looked and was unimpressed. Showing a log row as the
+            # LAST DETECTION reports a non-event as a detection, which is the
+            # opposite of the failure this line exists to prevent.
+            " WHERE d.tier IN ('watch', 'advisory', 'warning')"
+            " ORDER BY c.observed_at DESC LIMIT 1"
         ).fetchone()
         out["last_detection"] = dict(r) if r else None
 
@@ -293,6 +334,154 @@ a{color:var(--accent)}
 """
 
 
+_CORRIDOR_NET = None
+
+
+def _corridor_for(lat, lon, limit=8):
+    """
+    Downstream settlements for one point, computed on demand.
+
+    Cheap enough to do live only since the routing spatial index landed:
+    0.14 s for the 26 August source, against ~17 s before. Loaded lazily so
+    a dashboard that never shows a detection never pays for the network.
+
+    Off the trigger path by construction -- this is display only, runs after
+    the decision is long since in the ledger, and any failure here must show
+    an incomplete panel rather than break the page.
+    """
+    global _CORRIDOR_NET
+    try:
+        from .routing import (RiverNetwork, load_settlements, trace_branches,
+                              exposed_settlements_union)
+        if _CORRIDOR_NET is None:
+            _CORRIDOR_NET = (RiverNetwork.load(), load_settlements())
+        net, places = _CORRIDOR_NET
+        br = trace_branches(net, lat, lon, uncertainty_km=15.0)
+        if not br:
+            return None, []
+        ex = exposed_settlements_union(br, places, corridor_km=2.0)
+        return [b["name"] for b in br], ex[:limit], len(ex)
+    except Exception:
+        return None, [], 0
+
+
+# Plain-English reasons a decision landed where it did. The ledger already
+# answers "why did it not fire" -- that is a protected invariant -- but it
+# answers in factor strings like capped_watch_unknown_depth, which is an
+# answer only to someone who has read detect.py. This is the same answer for
+# everyone else.
+_WHY = {
+    "very_shallow":  ("+35", "source at or near the surface — the signature of a collapse"),
+    "shallow":       ("+20", "shallow source"),
+    "very_near_hazard": ("+45", "sitting on a mapped hazard"),
+    "near_hazard":   ("+30", "close to a mapped hazard"),
+    "magnitude_band": ("+15", "magnitude in the collapse band"),
+    "unknown_depth": ("cap", "DEPTH UNCONSTRAINED — the catalogue gave a default, "
+                             "not a measurement, so a collapse cannot be told from "
+                             "an ordinary earthquake. Capped at watch."),
+    "too_deep":      ("0",   "too deep for a surface failure"),
+    "magnitude_out_of_range": ("0", "magnitude outside the band this filter scores"),
+    "outside_bbox":  ("0",   "outside the watched area"),
+    "incomplete_record": ("0", "record missing depth or magnitude"),
+}
+
+
+def _why_tier(tier, score, factors, nearest_km=None):
+    """One line per reason, for a tooltip."""
+    try:
+        fs = json.loads(factors) if isinstance(factors, str) else list(factors or [])
+        if isinstance(fs, str):
+            fs = [x.strip() for x in fs.strip("()[]").replace("'", "").split(",") if x.strip()]
+    except Exception:
+        fs = []
+
+    th = {"watch": 45, "advisory": 57, "warning": 72}
+    lines = ["scored %s — watch needs %d, advisory %d, warning %d"
+             % (score, th["watch"], th["advisory"], th["warning"])]
+    for f in fs:
+        base = f.split("_0.")[0]
+        if base.startswith("proximity"):
+            lines.append("proximity confidence %s%s" % (
+                f.split("_")[-1],
+                (" — nearest mapped hazard %s km" % nearest_km)
+                if nearest_km is not None else ""))
+        elif base.startswith("capped_"):
+            lines.append("CAPPED: %s" % base.replace("capped_", "").replace("_", " "))
+        elif base in _WHY:
+            pts, txt = _WHY[base]
+            lines.append("%s  %s" % (pts, txt))
+        else:
+            lines.append(f)
+    if tier == "watch":
+        lines.append("")
+        lines.append("A watch is visible to an operator and is never dispatched.")
+    return "\n".join(lines)
+
+
+
+def _last_detection_panel(ld):
+    """The last real detection, in terms a person can act on."""
+    if not ld:
+        return ('<div class=note style="margin-top:10px"><b>LAST DETECTION</b>'
+                ' &nbsp;<span class=sub>none on record in this database'
+                '</span></div>')
+
+    d_age = _age(ld["decided_at"])
+    if d_age is None:      ago = "unknown"
+    elif d_age < 3600:     ago = "%.0f min ago" % (d_age / 60)
+    elif d_age < 86400:    ago = "%.1f h ago" % (d_age / 3600)
+    else:                  ago = "%.1f days ago" % (d_age / 86400)
+
+    lat, lon = ld.get("lat"), ld.get("lon")
+    where = ""
+    towns_html = ""
+    if lat is not None and lon is not None:
+        # The registry id -- RGI2000-v7.0-G-14-03432 -- is an inventory
+        # number and tells a reader nothing. notify.py already refuses to put
+        # these in alert text; the dashboard was still showing them raw.
+        # Coordinates and a map pin answer "where", which is the question.
+        gmap = "https://www.google.com/maps?q=%.4f,%.4f" % (lat, lon)
+        osm = "https://www.openstreetmap.org/?mlat=%.4f&mlon=%.4f#map=11/%.4f/%.4f" % (
+            lat, lon, lat, lon)
+        where = (' &nbsp;·&nbsp; <a href="%s" target="_blank" rel="noopener">'
+                 '%.3f N, %.3f E &#8599; map</a>'
+                 ' <span class=sub>(<a href="%s" target="_blank" '
+                 'rel="noopener">OSM</a>)</span>' % (gmap, lat, lon, osm))
+
+        res = _corridor_for(lat, lon)
+        if res and res[0]:
+            branches, towns, total = res
+            rows = "".join(
+                "<tr><td>%s</td><td style='text-align:right'>%.1f km</td></tr>"
+                % (html.escape(str(t.get("name") or "unnamed")[:32]),
+                   t.get("river_km", 0.0))
+                for t in towns)
+            towns_html = (
+                '<div style="margin-top:8px"><b>DOWNSTREAM</b> '
+                '<span class=sub>%d settlements along %s</span>'
+                '<div class=scroll><table><tr><th>place</th>'
+                '<th style="text-align:right">along channel</th></tr>%s</table></div>'
+                '<div class=sub>Traced along mapped channels from the source, '
+                'union of every branch within 15 km of it. Not a flood model '
+                'and not an evacuation list.</div></div>'
+            ) % (total, html.escape(", ".join(branches[:3])[:60]), rows)
+
+    return (
+        '<div class=note style="margin-top:10px">'
+        '<b>LAST DETECTION</b> &nbsp;<span class="t-{t}" title="{why}" style="border-bottom:1px dotted currentColor;cursor:help">{T}</span> &nbsp;{ago}'
+        '{where}'
+        '<div class=sub>score {sc} &nbsp;·&nbsp; M{mag}, depth {dep} km '
+        '&nbsp;·&nbsp; {when}</div>'
+        '{towns}'
+        '</div>'
+    ).format(t=ld["tier"], T=ld["tier"].upper(), ago=ago, where=where,
+             why=html.escape(_why_tier(ld["tier"], ld["score"],
+                                       ld.get("factors"), ld.get("nearest_km"))),
+             sc=ld["score"], mag=ld["magnitude"], dep=ld["depth_km"],
+             when=_when(ld["decided_at"]), towns=towns_html)
+
+
+
 def render(s):
     if s.get("error"):
         return (f"<!doctype html><meta charset=utf-8><style>{CSS}</style>"
@@ -346,33 +535,7 @@ def render(s):
                          f"system healthy · last poll {age:.0f}s ago · "
                          f"canary {('%.0f min' % (cage/60)) if cage is not None else 'n/a'} ago")
 
-    ld = s.get("last_detection")
-    if ld:
-        d_age = _age(ld["decided_at"])
-        if d_age is None:
-            ago = "unknown"
-        elif d_age < 3600:
-            ago = "%.0f min ago" % (d_age / 60)
-        elif d_age < 86400:
-            ago = "%.1f h ago" % (d_age / 3600)
-        else:
-            ago = "%.1f days ago" % (d_age / 86400)
-        last_line = (
-            '<div class=note style="margin-top:10px">'
-            '<b>LAST DETECTION</b> &nbsp;<span class="t-{t}">{T}</span> '
-            '&nbsp;{ago} &nbsp;·&nbsp; score {sc} &nbsp;·&nbsp; M{mag}, '
-            'depth {dep} km &nbsp;·&nbsp; {site} ({km} km)'
-            '<div class=sub>Shown regardless of the 24 h window above, so a '
-            'detection cannot be hidden by having happened yesterday.</div>'
-            '</div>'
-        ).format(t=ld["tier"], T=ld["tier"].upper(), ago=ago, sc=ld["score"],
-                 mag=ld["magnitude"], dep=ld["depth_km"],
-                 site=html.escape(str(ld["nearest_site"] or "")[:34]),
-                 km=ld["nearest_km"])
-    else:
-        last_line = ('<div class=note style="margin-top:10px">'
-                     '<b>LAST DETECTION</b> &nbsp;<span class=sub>none on '
-                     'record in this database</span></div>')
+    last_line = _last_detection_panel(s.get("last_detection"))
 
     g = gaps(s.get("beats", []))
     beats = [b for b in s.get("beats", []) if b["source"] == "usgs_catalogue"]
@@ -381,7 +544,7 @@ def render(s):
         for b in beats[-240:]) or "<div style='background:var(--line)'></div>"
 
     rows = "".join(
-        f"<tr><td>{r['decided_at'][:19].replace('T',' ')}</td>"
+        f"<tr><td>{_when(r['decided_at'])}</td>"
         f"<td class='t-{r['tier']}'>{r['tier'].upper()}</td>"
         f"<td>{r['score']}</td>"
         f"<td>M{r['magnitude']}</td><td>{r['depth_km']} km</td>"
@@ -393,8 +556,11 @@ def render(s):
         "six of twelve backtested years had none</td></tr>"
 
     seen_rows = "".join(
-        f"<tr><td>{r['observed_at'][:19].replace('T',' ')}</td>"
-        f"<td class='t-{r['tier']}'>{r['tier'].upper()}</td>"
+        f"<tr><td>{_when(r['observed_at'])}</td>"
+        f"<td class='t-{r['tier']}' title=\""
+        f"{html.escape(_why_tier(r['tier'], r['score'], r.get('factors'), r.get('nearest_km')))}\""
+        f" style='border-bottom:1px dotted currentColor;cursor:help'>"
+        f"{r['tier'].upper()}</td>"
         f"<td>{r['score']}</td>"
         f"<td>M{r['magnitude']}</td><td>{r['depth_km']} km</td>"
         f"<td>{(r['nearest_site'] or '')[:20]}</td>"
@@ -421,8 +587,8 @@ def render(s):
         "<tr><td colspan=2 class=sub>none yet</td></tr>"
 
     grows = "".join(
-        f"<tr><td>{x['from'][:19].replace('T',' ')}</td>"
-        f"<td>{x['to'][:19].replace('T',' ')}</td>"
+        f"<tr><td>{_when(x['from'])}</td>"
+        f"<td>{_when(x['to'])}</td>"
         f"<td>{x['seconds']/60:.0f} min</td></tr>" for x in g[:12]) or \
         "<tr><td colspan=3 class=sub>none in the last 7 days</td></tr>"
 
