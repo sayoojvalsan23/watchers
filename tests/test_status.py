@@ -102,3 +102,75 @@ def test_reduced_motion_still_conveys_position():
     h = _page(30)
     assert "prefers-reduced-motion" in h
     assert "--pct:50%" in h
+
+
+# --- the headline banner ---------------------------------------------------
+# It answers "what is happening on the ground", with system health demoted to
+# the subtitle. Two properties are load-bearing and are asserted separately
+# below, because getting either backwards is a safety failure, not a cosmetic
+# one:
+#
+#   1. "nothing detected" may NEVER be shown by a watcher that has stopped
+#      polling. That is a claim about the ground made by something not
+#      looking at it -- the same reason the canary exists.
+#   2. A hazard already in the ledger OUTRANKS a stale poller. Hiding a real
+#      WATCH behind an infrastructure complaint loses the thing the operator
+#      most needs to see.
+
+def _banner(base, **over):
+    s = dict(base)
+    s.update(over)
+    return st.render(s)
+
+
+@pytest.fixture
+def snap(db):
+    return st.snapshot(db)
+
+
+def test_quiet_and_healthy_says_nothing_detected(snap):
+    h = _banner(snap, poll_age=27, canary_age=300, recent_tiers={})
+    assert "NOTHING DETECTED" in h
+    assert "system healthy" in h
+
+
+def test_a_watch_takes_the_headline(snap):
+    """26 Aug 2026, 08:37 NPT: M4.4 / earthquake / 10 km default depth.
+    Scores WATCH. The operator must see that from the banner, not by
+    scrolling to a table."""
+    h = _banner(snap, poll_age=27, canary_age=300, recent_tiers={"watch": 1})
+    assert "WATCH" in h
+    assert "NOTHING DETECTED" not in h
+
+
+def test_a_dispatch_tier_decision_takes_the_headline(snap):
+    """The same event at 21:43, once USGS re-typed it: M5.2 / landslide /
+    0 km. Escalates to WARNING."""
+    h = _banner(snap, poll_age=27, canary_age=300,
+                recent_tiers={"warning": 1, "watch": 3})
+    assert "WARNING" in h
+
+
+def test_stale_watcher_never_claims_nothing_detected(snap):
+    """PROPERTY 1. A watcher that stopped cannot speak for the ground."""
+    h = _banner(snap, poll_age=4000, canary_age=300, recent_tiers={})
+    assert "NOTHING DETECTED" not in h
+    assert "NOT LOOKING" in h
+
+
+def test_a_real_watch_outranks_a_stale_poller(snap):
+    """PROPERTY 2. The hazard keeps the headline; staleness is still said."""
+    h = _banner(snap, poll_age=4000, canary_age=300, recent_tiers={"watch": 2})
+    assert "WATCH" in h
+    assert "WATCHER STALE" in h
+
+
+def test_a_warning_outranks_a_stale_poller(snap):
+    h = _banner(snap, poll_age=4000, canary_age=300, recent_tiers={"warning": 1})
+    assert "WARNING" in h
+    assert "WATCHER STALE" in h
+
+
+def test_canary_staleness_still_surfaces_when_quiet(snap):
+    h = _banner(snap, poll_age=27, canary_age=99999, recent_tiers={})
+    assert "CANARY STALE" in h

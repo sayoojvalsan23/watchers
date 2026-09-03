@@ -175,6 +175,12 @@ def snapshot(db):
             " WHERE d.tier = 'reject' GROUP BY reason"
             " ORDER BY n DESC LIMIT 8")]
 
+        # Highest tier decided in the last 24 h, for the headline banner.
+        since24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        out["recent_tiers"] = {r["tier"]: r["n"] for r in c.execute(
+            "SELECT d.tier, COUNT(*) n FROM decisions d"
+            " WHERE d.decided_at > ? GROUP BY d.tier", (since24,))}
+
         out["data_age"] = _data_age()
 
         out["recent"] = [dict(r) for r in c.execute(
@@ -275,14 +281,50 @@ def render(s):
                 f"<div class=sub>{s['error']}</div></div></div>")
 
     age, cage = s.get("poll_age"), s.get("canary_age")
-    if age is None:
-        cls, hdr, why = "bad", "NEVER POLLED", "no successful poll on record"
+
+    # The headline is the HAZARD state; system health moves to the subtitle.
+    # But a health fault takes the headline back, and that is not a style
+    # choice: "nothing detected" asserted by a watcher that stopped polling
+    # is a claim the system has not earned. Absence of events is not health
+    # -- the same reason the canary exists. Quiet is only meaningful from a
+    # system that is demonstrably looking.
+    rt = s.get("recent_tiers") or {}
+    n_warn = rt.get("warning", 0) + rt.get("advisory", 0)
+    n_watch = rt.get("watch", 0)
+
+    stale = age is None or age > STALE_SECONDS
+    blind = ("  ·  WATCHER STALE, nothing seen since"
+             if stale else "")
+
+    # A hazard that has already been decided outranks a stale poller. Showing
+    # NOT LOOKING over a real WATCH hides the thing the operator most needs;
+    # the staleness is still said, in the subtitle. The reverse case is the
+    # one that must never happen: "nothing detected" from a watcher that
+    # stopped, which is a claim about the ground made by something that is
+    # not looking at it.
+    if n_warn:
+        cls, hdr, why = ("bad", "WARNING",
+                         f"{n_warn} dispatch-tier decision(s) in 24 h" + blind
+                         + (f"  ·  system healthy, last poll {age:.0f}s ago"
+                            if not stale else ""))
+    elif n_watch:
+        cls, hdr, why = ("warn", "WATCH",
+                         f"{n_watch} watch-tier decision(s) in 24 h" + blind
+                         + (f"  ·  system healthy, last poll {age:.0f}s ago"
+                            if not stale else ""))
+    elif age is None:
+        cls, hdr, why = "bad", "NOT LOOKING", "no successful poll on record — this is not 'quiet'"
     elif age > STALE_SECONDS:
-        cls, hdr, why = "bad", "STALE", f"last good poll {age/60:.0f} min ago — this is a page"
+        cls, hdr, why = ("bad", "NOT LOOKING",
+                         f"watcher stale, last good poll {age/60:.0f} min ago — "
+                         f"cannot speak for the last {age/60:.0f} min")
     elif cage is not None and cage > CANARY_STALE_SECONDS:
-        cls, hdr, why = "warn", "CANARY STALE", f"canary last passed {cage/3600:.1f} h ago"
+        cls, hdr, why = ("warn", "CANARY STALE",
+                         f"polling, but the canary last passed {cage/3600:.1f} h ago")
     else:
-        cls, hdr, why = "ok", "HEALTHY", f"last poll {age:.0f}s ago"
+        cls, hdr, why = ("ok", "NOTHING DETECTED",
+                         f"system healthy · last poll {age:.0f}s ago · "
+                         f"canary {('%.0f min' % (cage/60)) if cage is not None else 'n/a'} ago")
 
     g = gaps(s.get("beats", []))
     beats = [b for b in s.get("beats", []) if b["source"] == "usgs_catalogue"]
@@ -413,11 +455,17 @@ def render(s):
 
   <h2>what the detector saw <span class=sub>every evaluation, rejects included</span></h2>
   <div class=note><b>This is not a risk forecast.</b> A tier is a Phase 1
-  measurement category, not a public advisory, and the feed cannot support one:
-  for the 26 August 2026 event the characterised record arrived
-  <b>13 h 06 m after the collapse</b> (D5). At 08:37, while it mattered, the
-  feed carried M4.4 / <code>type=earthquake</code> / 10 km default depth, which
-  this filter correctly REJECTS. A quiet table here means the catalogue was
+  measurement category, not a public advisory, and the feed cannot support one.
+  For the 26 August 2026 event the characterised record arrived
+  <b>13 h 06 m after the collapse</b> (D5). At 08:37, while it still mattered,
+  the feed carried M4.4 / <code>type=earthquake</code> / <b>10 km depth</b> —
+  and 10 km is not a measurement, it is one of four catalogue defaults meaning
+  <b>depth unconstrained</b>. That record scores <b>WATCH</b>, not warning:
+  visible to an operator, never dispatched. Depth is the whole discriminator
+  between a surface collapse and an ordinary earthquake, 40.6% of catalogue
+  events carry no real depth, and dispatching on those would mean broadcasting
+  on a large share of every small quake in the range. The filter is right; the
+  feed is thirteen hours late. A quiet table here means the catalogue was
   quiet, which is not the same as the ground being quiet.</div>
   <div class=scroll><table>
     <tr><th>observed</th><th>tier</th><th>score</th><th>mag</th><th>depth</th>
