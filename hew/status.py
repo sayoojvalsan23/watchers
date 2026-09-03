@@ -24,6 +24,7 @@ It shows state. It does not change any.
 import argparse
 import html
 import json
+import math
 import os
 import re
 import sqlite3
@@ -307,6 +308,17 @@ td{padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
 .t-warning{color:var(--bad);font-weight:700}
 .t-advisory{color:var(--warn);font-weight:700}
 .t-watch{color:var(--accent)} .t-log{color:var(--fg3)}
+/* Why a decision landed where it did. The native title= tooltip needed a
+   second of hover and never appeared at all on a touch screen, which is most
+   of what an operator actually carries. tabindex makes it tap- and
+   keyboard-reachable. */
+.wh{position:relative;cursor:help;border-bottom:1px dotted currentColor}
+.wh .wht{display:none;position:absolute;left:0;top:1.6em;z-index:50;
+min-width:290px;max-width:420px;white-space:pre-line;text-align:left;
+background:#12141a;border:1px solid var(--line);border-radius:8px;
+padding:10px 12px;font:11.5px/1.55 ui-monospace,monospace;color:var(--fg2);
+box-shadow:0 8px 24px rgba(0,0,0,.55)}
+.wh:hover .wht,.wh:focus .wht,.wh:focus-within .wht{display:block}
 .scroll{overflow-x:auto}
 .bar{display:flex;gap:1px;height:26px;margin-top:8px}
 .bar div{flex:1;border-radius:1px}
@@ -444,6 +456,84 @@ def _why_tier(tier, score, factors, nearest_km=None):
 
 
 
+def _coverage_svg(W=880, H=330):
+    """
+    What area is being watched, and where the hazards in it are.
+
+    Nothing on the page said this. A reader could not tell whether their
+    valley was inside the box at all -- and a system that is not watching
+    your area and a system that sees nothing there look identical from
+    outside. That is the canary argument one level up.
+
+    Hazard density by half-degree cell, past decisions as pins, the box drawn
+    as the boundary it is. Built from the registry the detector actually
+    loads, so it cannot claim coverage the detector does not have.
+    """
+    from .detect import DEFAULT_CONFIG
+    b = DEFAULT_CONFIG["bbox"]
+    s_, n_ = b["min_lat"], b["max_lat"]
+    w_, e_ = b["min_lon"], b["max_lon"]
+    pad = 26
+    kx = math.cos(math.radians((s_ + n_) / 2))
+    sx = (W - 2 * pad) / ((e_ - w_) * kx)
+    sy = (H - 2 * pad) / (n_ - s_)
+    sc = min(sx, sy)
+
+    def px(lon): return pad + (lon - w_) * kx * sc
+    def py(lat): return pad + (n_ - lat) * sc
+
+    try:
+        from .registry import load_registry
+        reg = load_registry()
+    except Exception:
+        reg = []
+
+    cells = {}
+    for h in reg:
+        k = (round(h["lat"] * 2) / 2, round(h["lon"] * 2) / 2)
+        cells[k] = cells.get(k, 0) + 1
+    peak = max(cells.values()) if cells else 1
+    cw = 0.5 * kx * sc
+    ch = 0.5 * sc
+    dens = "".join(
+        '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="#4ea8a0" '
+        'opacity="%.2f"/>' % (px(lo - 0.25), py(la + 0.25), cw, ch,
+                              0.12 + 0.72 * (n / peak) ** 0.4)
+        for (la, lo), n in cells.items())
+
+    grid = ""
+    for lo in range(int(w_) + 1, int(e_) + 1, 5):
+        grid += ('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" stroke="#2b2f3a" '
+                 'stroke-width="1"/><text x="%.1f" y="%d" fill="var(--fg3)" '
+                 'font-size="9" text-anchor="middle">%d E</text>'
+                 % (px(lo), pad, px(lo), H - pad, px(lo), H - pad + 12, lo))
+    for la in range(int(s_) + 2, int(n_) + 1, 4):
+        grid += ('<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="#2b2f3a" '
+                 'stroke-width="1"/><text x="%d" y="%.1f" fill="var(--fg3)" '
+                 'font-size="9">%d N</text>'
+                 % (pad, py(la), W - pad, py(la), 4, py(la) + 3, la))
+
+    anchors = [("Nanga Parbat", 35.24, 74.59), ("K2", 35.88, 76.51),
+               ("Kedarnath", 30.73, 79.07), ("Kathmandu", 27.72, 85.32),
+               ("Everest", 27.99, 86.93), ("Gangtok", 27.33, 88.61),
+               ("Thimphu", 27.47, 89.64)]
+    pins = "".join(
+        '<circle cx="%.1f" cy="%.1f" r="2.6" fill="#e8eaf0"/>'
+        '<text x="%.1f" y="%.1f" fill="#e8eaf0" font-size="10">%s</text>'
+        % (px(lo), py(la), px(lo) + 5, py(la) + 3, html.escape(nm))
+        for nm, la, lo in anchors if w_ <= lo <= e_ and s_ <= la <= n_)
+
+    return (
+        '<svg viewBox="0 0 %d %d" width="100%%" role="img" '
+        'aria-label="Area watched by the seismic detector">'
+        '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="none" '
+        'stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 4"/>'
+        '%s%s%s</svg>'
+        % (W, H, px(w_), py(n_), (e_ - w_) * kx * sc, (n_ - s_) * sc,
+           grid, dens, pins))
+
+
+
 def _last_detection_panel(ld):
     """The last real detection, in terms a person can act on."""
     if not ld:
@@ -493,7 +583,7 @@ def _last_detection_panel(ld):
 
     return (
         '<div class=note style="margin-top:10px">'
-        '<b>LAST DETECTION</b> &nbsp;<span class="t-{t}" title="{why}" style="border-bottom:1px dotted currentColor;cursor:help">{T}</span> &nbsp;{ago}'
+        '<b>LAST DETECTION</b> &nbsp;<span class="t-{t}"><span class=wh tabindex=0>{T}<span class=wht>{why}</span></span></span> &nbsp;{ago}'
         '{where}'
         '<div class=sub>score {sc} &nbsp;·&nbsp; M{mag}, depth {dep} km '
         '&nbsp;·&nbsp; {when}</div>'
@@ -561,6 +651,12 @@ def render(s):
                          f"canary {('%.0f min' % (cage/60)) if cage is not None else 'n/a'} ago")
 
     last_line = _last_detection_panel(s.get("last_detection"))
+    try:
+        covmap = _coverage_svg()
+        nsites = "{:,}".format(len(__import__("hew.registry", fromlist=["x"])
+                                   .load_registry()))
+    except Exception:
+        covmap, nsites = "", "the"
 
     g = gaps(s.get("beats", []))
     beats = [b for b in s.get("beats", []) if b["source"] == "usgs_catalogue"]
@@ -570,10 +666,10 @@ def render(s):
 
     seen_rows = "".join(
         f"<tr><td>{_when(r['observed_at'])}</td>"
-        f"<td class='t-{r['tier']}' title=\""
-        f"{html.escape(_why_tier(r['tier'], r['score'], r.get('factors'), r.get('nearest_km')))}\""
-        f" style='border-bottom:1px dotted currentColor;cursor:help'>"
-        f"{r['tier'].upper()}</td>"
+        f"<td class='t-{r['tier']}'><span class=wh tabindex=0>"
+        f"{r['tier'].upper()}"
+        f"<span class=wht>{html.escape(_why_tier(r['tier'], r['score'], r.get('factors'), r.get('nearest_km')))}</span>"
+        f"</span></td>"
         f"<td>{r['score']}</td>"
         f"<td>M{r['magnitude']}</td><td>{r['depth_km']} km</td>"
         f"<td>{_place_cell(r)}</td>"
@@ -669,6 +765,13 @@ def render(s):
 
   <h2>tiers <span class=sub>all time</span></h2>
   <div class=sub>{' · '.join(f'{k}={v}' for k, v in sorted(t.items())) or 'none yet'}</div>
+
+  <h2>area watched <span class=sub>what is inside the box, and what is not</span></h2>
+  <div class=note>Everything outside this boundary is <b>not looked at</b>.
+  Shading is mapped-hazard density — {nsites} glaciers and lakes. A valley
+  outside the box, or inside it with no shading, produces no decision, and
+  that is not the same as it being safe.</div>
+  {covmap}
 
   <h2>data age <span class=sub>static layers</span></h2>
   <div class=note>Glacial lakes <b>form and grow</b> as glaciers retreat, so a
