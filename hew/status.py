@@ -24,6 +24,7 @@ It shows state. It does not change any.
 import argparse
 import json
 import os
+import re
 import sqlite3
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -39,6 +40,75 @@ def _conn(db):
     c = sqlite3.connect(uri, uri=True, timeout=5)
     c.row_factory = sqlite3.Row
     return c
+
+
+# How old a layer may get before the page says so. These are not arbitrary:
+# glacial lakes FORM AND GROW as glaciers retreat, so a stale lake inventory
+# is a growing set of unmapped hazards -- silent false negatives of exactly
+# the kind that made the Nepal box invisible for so long. The registry's own
+# sources are older than they look: RGI is nominally year 2000, and the HMA
+# lake inventory is the 2015-2018 epoch.
+_STALE_DAYS = {
+    "glacial_lakes_hma": 730,      # lakes change; 2 years is generous
+    "hazard_sites_himalaya": 730,
+    "places_himalaya": 1095,       # settlements move slowly
+    "rivers_himalaya": 1095,
+    "places_region": 1095,
+    "rivers_region": 1095,
+}
+
+
+def _data_age():
+    """
+    Age of each static layer, read from data/manifest.json.
+
+    Nothing anywhere warned that a layer had gone stale. A status page that
+    asserts nothing it has not read should also say how old what it read is.
+    """
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "data", "manifest.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path) as f:
+            man = json.load(f)
+    except (OSError, ValueError):
+        return []
+
+    now, out = datetime.now(timezone.utc), []
+    for name, meta in sorted(man.items()):
+        if not isinstance(meta, dict):
+            continue
+        stamp = meta.get("built") or meta.get("fetched_at") or meta.get("fetched")
+        epoch = meta.get("epoch")
+        days = None
+        if stamp:
+            try:
+                d = datetime.fromisoformat(str(stamp))
+                if d.tzinfo is None:
+                    d = d.replace(tzinfo=timezone.utc)
+                days = (now - d).days
+            except ValueError:
+                days = None
+        # Age against the SOURCE EPOCH when there is one, not the build date.
+        # glacial_lakes_hma has no fetch stamp and would otherwise read "ok"
+        # forever -- and it is the single layer whose staleness matters most,
+        # because the lakes it is missing are the ones that formed since.
+        epoch_days = None
+        if epoch:
+            years = [int(y) for y in re.findall(r"\d{4}", str(epoch))]
+            if years:
+                epoch_days = (now - datetime(max(years), 12, 31,
+                                             tzinfo=timezone.utc)).days
+
+        limit = _STALE_DAYS.get(name)
+        effective = max(d for d in (days, epoch_days) if d is not None) \
+            if (days is not None or epoch_days is not None) else None
+        out.append({"name": name, "epoch": epoch, "days": days,
+                    "epoch_days": epoch_days,
+                    "stale": bool(limit and effective is not None
+                                  and effective > limit)})
+    return out
 
 
 def _age(iso):
@@ -84,6 +154,28 @@ def snapshot(db):
         out["beats"] = [dict(r) for r in c.execute(
             "SELECT source, ok, at FROM heartbeats WHERE at > ?"
             " ORDER BY at", (since,))]
+
+        # Everything evaluated, rejects INCLUDED. The ledger already keeps
+        # negatives -- that is a protected invariant, so "why did it not
+        # fire" is answerable -- but the page hid them, so the answer was
+        # only reachable by opening SQLite. Absence of dispatch and absence
+        # of a working filter look identical without this.
+        out["seen"] = [dict(r) for r in c.execute(
+            "SELECT c.external_id, c.observed_at, c.magnitude, c.depth_km,"
+            " d.score, d.tier, d.factors, d.nearest_site, d.nearest_km,"
+            " d.suppressed, d.suppress_reason, d.decided_at"
+            " FROM decisions d JOIN candidates c ON c.id = d.candidate_id"
+            " ORDER BY d.decided_at DESC LIMIT 40")]
+
+        # Rejects collapsed by reason: 40.6% of catalogue events are
+        # fixed-depth, so listing them individually buries everything else.
+        out["reject_reasons"] = [dict(r) for r in c.execute(
+            "SELECT COALESCE(NULLIF(d.suppress_reason,''), d.factors,"
+            " 'unspecified') reason, COUNT(*) n FROM decisions d"
+            " WHERE d.tier = 'reject' GROUP BY reason"
+            " ORDER BY n DESC LIMIT 8")]
+
+        out["data_age"] = _data_age()
 
         out["recent"] = [dict(r) for r in c.execute(
             "SELECT c.external_id, c.observed_at, c.magnitude, c.depth_km,"
@@ -210,6 +302,34 @@ def render(s):
         "<tr><td colspan=8 class=sub>no non-reject decisions yet — expected; "\
         "six of twelve backtested years had none</td></tr>"
 
+    seen_rows = "".join(
+        f"<tr><td>{r['observed_at'][:19].replace('T',' ')}</td>"
+        f"<td class='t-{r['tier']}'>{r['tier'].upper()}</td>"
+        f"<td>{r['score']}</td>"
+        f"<td>M{r['magnitude']}</td><td>{r['depth_km']} km</td>"
+        f"<td>{(r['nearest_site'] or '')[:20]}</td>"
+        f"<td>{r['nearest_km'] if r['nearest_km'] is not None else ''}</td>"
+        f"<td class=sub>{(r['suppress_reason'] or r['factors'] or '')[:44]}</td></tr>"
+        for r in s.get("seen", [])) or \
+        "<tr><td colspan=8 class=sub>nothing evaluated yet in this database"\
+        " — the backtested rate is ~1.2 dispatch-tier events a year, so an"\
+        " empty table is the expected state, not a fault. The canary above"\
+        " is what proves the path still works.</td></tr>"
+
+    age_rows = "".join(
+        f"<tr><td>{d['name']}</td>"
+        f"<td>{d['epoch'] or ''}</td>"
+        f"<td>{('%d days' % d['days']) if d['days'] is not None else '—'}</td>"
+        f"<td class='{'t-warning' if d['stale'] else 'sub'}'>"
+        f"{'STALE' if d['stale'] else 'ok'}</td></tr>"
+        for d in s.get("data_age", [])) or \
+        "<tr><td colspan=4 class=sub>no manifest</td></tr>"
+
+    rej_rows = "".join(
+        f"<tr><td>{(x['reason'] or '')[:60]}</td><td>{x['n']}</td></tr>"
+        for x in s.get("reject_reasons", [])) or \
+        "<tr><td colspan=2 class=sub>none yet</td></tr>"
+
     grows = "".join(
         f"<tr><td>{x['from'][:19].replace('T',' ')}</td>"
         f"<td>{x['to'][:19].replace('T',' ')}</td>"
@@ -279,6 +399,35 @@ def render(s):
 
   <h2>tiers <span class=sub>all time</span></h2>
   <div class=sub>{' · '.join(f'{k}={v}' for k, v in sorted(t.items())) or 'none yet'}</div>
+
+  <h2>data age <span class=sub>static layers</span></h2>
+  <div class=note>Glacial lakes <b>form and grow</b> as glaciers retreat, so a
+  stale inventory is a growing set of unmapped hazards — the same silent
+  false negative that hid Kedarnath and Chamoli until the box was widened.
+  Note the source epochs: RGI glacier outlines are nominally <b>year 2000</b>
+  and the HMA lake inventory is the <b>2015–2018</b> epoch, both older than
+  the build date beside them.</div>
+  <div class=scroll><table>
+    <tr><th>layer</th><th>source epoch</th><th>built/fetched</th><th></th></tr>{age_rows}
+  </table></div>
+
+  <h2>what the detector saw <span class=sub>every evaluation, rejects included</span></h2>
+  <div class=note><b>This is not a risk forecast.</b> A tier is a Phase 1
+  measurement category, not a public advisory, and the feed cannot support one:
+  for the 26 August 2026 event the characterised record arrived
+  <b>13 h 06 m after the collapse</b> (D5). At 08:37, while it mattered, the
+  feed carried M4.4 / <code>type=earthquake</code> / 10 km default depth, which
+  this filter correctly REJECTS. A quiet table here means the catalogue was
+  quiet, which is not the same as the ground being quiet.</div>
+  <div class=scroll><table>
+    <tr><th>observed</th><th>tier</th><th>score</th><th>mag</th><th>depth</th>
+        <th>nearest hazard</th><th>km</th><th>why</th></tr>{seen_rows}
+  </table></div>
+
+  <h2>rejects by reason <span class=sub>all time</span></h2>
+  <div class=scroll><table>
+    <tr><th>reason</th><th>n</th></tr>{rej_rows}
+  </table></div>
 
   <h2>recent decisions <span class=sub>rejects hidden</span></h2>
   <div class=scroll><table>
