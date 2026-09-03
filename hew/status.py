@@ -914,12 +914,88 @@ padding:12px 16px;margin-bottom:18px}}
     <div class=sub>Simulated events. Nothing here is real, nothing is dispatched,
     and nothing is recorded. <a href="/">← live status</a></div></div>
   <h1>Simulate an event</h1>
+  <div class=note style="margin-bottom:14px"><b>See the dashboard, not just
+  the corridor.</b> Append <code>/dashboard</code> to any scenario link below,
+  or <a href="/simulate/dashboard?s=rasuwagadhi_border">open one now</a>, to
+  render the LIVE status page exactly as it would appear during that event --
+  same banner, same panel, same tooltips, because it is the same code path.
+  A drill that does not look like the alarm cannot rehearse the alarm.</div>
+
   <h2>scenarios</h2>
   {links}
   <h2>custom</h2>
   <div class=sub>/simulate?lat=28.3&amp;lon=85.4&amp;depth=1.5&amp;mag=5.0</div>
   {body}
 </div>"""
+
+
+def _drill_dashboard(query):
+    """
+    The LIVE dashboard as it would look during this event.
+
+    The drill page showed a map and a corridor; the dashboard showed a banner,
+    a last-detection panel and a table. So a drill proved the DETECTOR works
+    and proved nothing about what an operator would actually be looking at.
+    You cannot rehearse an alarm you have never seen.
+
+    This renders the real render() -- same banner precedence, same panel, same
+    tooltips -- over a snapshot with the simulated decision spliced in. What
+    you see here is what the page will do, because it is the same code path.
+
+    WRITES NOTHING. The snapshot is built in memory and discarded, exactly as
+    /simulate does: simulated events must never enter the decision ledger.
+    """
+    from .detect import evaluate, DEFAULT_CONFIG
+    from .registry import load_registry
+    from . import drill as _drill
+
+    q = urllib.parse.parse_qs(query)
+    scen = (q.get("s") or [None])[0]
+    if scen and scen in _drill.SCENARIOS:
+        _lab, lat, lon, depth, mag = _drill.SCENARIOS[scen][:5]
+    else:
+        try:
+            lat = float((q.get("lat") or ["28.271"])[0])
+            lon = float((q.get("lon") or ["85.515"])[0])
+            depth = float((q.get("depth") or ["1.5"])[0])
+            mag = float((q.get("mag") or ["5.2"])[0])
+        except ValueError:
+            lat, lon, depth, mag = 28.271, 85.515, 1.5, 5.2
+
+    r = evaluate(lat, lon, depth, mag, load_registry(), DEFAULT_CONFIG)
+    now = datetime.now(timezone.utc).isoformat()
+
+    snap = snapshot(Handler.db)
+    snap["recent_tiers"] = dict(snap.get("recent_tiers") or {})
+    snap["recent_tiers"][r["tier"]] = snap["recent_tiers"].get(r["tier"], 0) + 1
+    snap["last_detection"] = {
+        "tier": r["tier"], "score": r["score"], "decided_at": now,
+        "nearest_site": r["nearest_site"], "nearest_km": r["nearest_km"],
+        "magnitude": mag, "depth_km": depth, "lat": lat, "lon": lon,
+        "external_id": "DRILL", "factors": json.dumps(list(r["factors"])),
+    }
+    snap["seen"] = [{
+        "external_id": "DRILL", "observed_at": now, "magnitude": mag,
+        "depth_km": depth, "score": r["score"], "tier": r["tier"],
+        "factors": json.dumps(list(r["factors"])),
+        "nearest_site": r["nearest_site"], "nearest_km": r["nearest_km"],
+        "suppressed": 1, "suppress_reason": "drill — nothing was dispatched",
+        "decided_at": now,
+    }] + list(snap.get("seen") or [])
+
+    page = render(snap)
+    banner = (
+        '<div style="position:sticky;top:0;z-index:99;background:#3a2a12;'
+        'border-bottom:2px solid #d0a24c;padding:10px 16px;font:13px ui-monospace,'
+        'monospace;color:#f0d9a8">'
+        '<b>DRILL — this is what the dashboard would look like.</b> '
+        'Simulated M%.1f at %.3f, %.3f, depth %.1f km. '
+        'Nothing was dispatched, nothing was written to the ledger, no '
+        'notification was sent. <a href="/" style="color:#f0d9a8">live status &rarr;</a> '
+        '&nbsp;·&nbsp; <a href="/simulate" style="color:#f0d9a8">other scenarios &rarr;</a>'
+        '</div>' % (mag, lat, lon, depth))
+    return page.replace("<div class=wrap>", banner + "<div class=wrap>", 1)
+
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -945,6 +1021,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/status.json":
             self._send(200, json.dumps(snapshot(self.db), default=str).encode(),
                        "application/json")
+        elif path == "/simulate/dashboard":
+            self._send(200, _drill_dashboard(
+                urllib.parse.urlparse(self.path).query).encode(), "text/html")
         elif path == "/simulate":
             self._send(200, _drill(urllib.parse.urlparse(self.path).query).encode(),
                        "text/html")
